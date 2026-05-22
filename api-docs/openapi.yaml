@@ -127,7 +127,7 @@ paths:
                 properties:
                   access_token:
                     type: string
-                    description: JWT для использования в `Authorization: Bearer <jwt>` header
+                    description: 'JWT для использования в `Authorization: Bearer <jwt>` header'
                   token_type:
                     type: string
                     enum: [bearer]
@@ -183,7 +183,7 @@ paths:
                   minLength: 6
                 data:
                   type: object
-                  description: Произвольные user_metadata, например `{full_name: "..."}`. Trigger подхватит из `raw_user_meta_data.full_name` для `profiles.display_name`.
+                  description: 'Произвольные user_metadata, например `{full_name: "..."}`. Trigger подхватит из `raw_user_meta_data.full_name` для `profiles.display_name`.'
       responses:
         '200':
           description: Юзер создан, сессия активна
@@ -704,7 +704,7 @@ paths:
                     UUID проекта. Optional — priority резолва: explicit `project_id` > `analysis.project_id` > первый project юзера. Generation row всегда несёт `project_id` (NOT NULL).
       responses:
         '200':
-          description: Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.
+          description: 'Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.'
           content:
             application/json:
               schema:
@@ -1183,7 +1183,7 @@ components:
           format: date-time
         user_metadata:
           type: object
-          description: 'Произвольные данные из `data` поля signup'а (e.g. `full_name`).'
+          description: "Произвольные данные из `data` поля signup'а (e.g. `full_name`)."
 
     AuthErrorResponse:
       type: object
