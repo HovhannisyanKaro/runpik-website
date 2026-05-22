@@ -1,0 +1,1583 @@
+openapi: 3.1.0
+info:
+  title: Runpik Backend API
+  version: '2026-05-22'
+  description: |
+    AI-сервис продуктовой фотографии. Документация описывает client-facing
+    API контракт: Edge Functions, PostgREST endpoints для прямого доступа
+    к таблицам, RPCs и Supabase Auth endpoints.
+
+    ## Архитектура
+
+    - **Supabase Cloud** (project ref `wnbtsqfdlbjwtetppdng`, регион `eu-central-1` Frankfurt)
+    - **5 Edge Functions:** `/analyze`, `/generate`, `/shot-types`, `/delete-project`, `/admin`
+    - **Google Gemini API** — `gemini-2.5-flash` для vision/text, `gemini-2.5-flash-image` для генерации
+    - **Storage buckets:** `inputs` (приватный, 10 MiB max), `outputs` (приватный, signed URL TTL 1 час)
+
+    ## Двухстадийный pipeline генерации
+
+    1. Frontend загружает фото в `inputs/{user_id}/...` Storage bucket
+    2. `POST /functions/v1/analyze` → Gemini Flash text возвращает `ProductAnalysis` JSON + кеширует
+    3. Frontend проверяет `analysis.is_suitable.verdict` — если `false`, показывает blockers
+    4. Frontend дёргает `GET /functions/v1/shot-types` для рендера UI выбора типа кадра
+    5. `POST /functions/v1/generate` → Gemini Flash Image генерирует output, кладёт в `outputs/{user_id}/...`, возвращает signed URL (TTL 1 час)
+
+    ## Аутентификация
+
+    Большинство endpoints требуют **двух заголовков**:
+    - `apikey` — anon JWT проекта (публичный, можно вшивать в клиент — защита данных через RLS)
+    - `Authorization: Bearer <user_jwt>` — JWT залогиненного юзера, срок ~1 час
+
+    Получение JWT: `POST /auth/v1/token?grant_type=password` с email и password.
+
+    ## Проекты (workspaces)
+
+    Каждая генерация и каждый анализ принадлежит project'у. У юзера **всегда минимум 1 project** (backend invariant). Default project автоматически создаётся при signup с именем = сегодняшняя UTC дата в формате `YYYY-MM-DD` (например `2026-05-21`).
+
+    ## Mock mode
+
+    Сейчас backend в mock mode (`RUNPIK_MOCK_GENERATION=true`) — `/generate` возвращает копию input bytes вместо реальной AI-генерации. Это потому что Gemini Flash Image billing ещё не включён на Google Cloud. Mock mode пройдёт когда включим billing. В mock-режиме response содержит поле `"mock": true`.
+
+    ## Подробная narrative-style документация
+
+    Полные descriptions, troubleshooting, Flutter integration patterns:
+    [github.com/HovhannisyanKaro/runpik-backend/blob/main/docs/API.md](https://github.com/HovhannisyanKaro/runpik-backend/blob/main/docs/API.md) (приватный repo).
+
+  contact:
+    name: Runpik
+    email: legal@runpik.com
+    url: https://runpik.com
+  license:
+    name: Proprietary
+    url: https://runpik.com/terms.html
+
+servers:
+  - url: https://wnbtsqfdlbjwtetppdng.supabase.co
+    description: Production (Supabase Cloud, eu-central-1)
+  - url: https://wnbtsqfdlbjwtetppdng.functions.supabase.co
+    description: Edge Functions direct URL (alternative to /functions/v1/ через gateway)
+
+security:
+  - BearerJWT: []
+    AnonApiKey: []
+
+tags:
+  - name: Auth
+    description: Регистрация, логин, восстановление пароля, выход. Endpoints Supabase Auth с префиксом `/auth/v1/`.
+  - name: Profile
+    description: Профиль пользователя — чтение, обновление locale, запись ToS/Privacy acceptance, schedule deletion. Работа через PostgREST.
+  - name: Projects
+    description: Управление проектами (workspace-like группировка). У юзера всегда минимум 1 project. CRUD через PostgREST, delete — через Edge Function (для blob cleanup).
+  - name: AI Pipeline
+    description: Двухстадийный AI flow — анализ фото (Stage 1, бесплатно) + генерация изображения (Stage 2, 1 кредит). Plus каталог типов кадров для UI.
+  - name: Admin
+    description: Backend admin endpoints — **только для пользователей с ролью superadmin**. 11 read-only routes для inspection runtime config, prompts, audit log, etc. Regular users → 403.
+  - name: RPCs
+    description: Database-level функции — баланс кредитов, planning/cancel account deletion.
+
+paths:
+
+  # ============================================================
+  # AUTH
+  # ============================================================
+
+  /auth/v1/token:
+    post:
+      tags: [Auth]
+      summary: Войти по email и паролю
+      description: |
+        Получить `access_token` (JWT) для залогиненного юзера. Возвращает также `refresh_token` для автоматического продления сессии. Срок жизни access_token ~1 час, refresh_token живёт намного дольше (несколько недель).
+
+        В Flutter SDK эта операция вызывается через `supabase.auth.signInWithPassword(email: ..., password: ...)`. SDK сохраняет токены в secure storage устройства и автоматически refresh'ит когда подходит к expiry.
+
+        В Postman сохрани `access_token` в env variable через Tests script — будет использоваться во всех authenticated endpoints как `Authorization: Bearer {{access_token}}`.
+      security:
+        - AnonApiKey: []
+      parameters:
+        - in: query
+          name: grant_type
+          required: true
+          schema:
+            type: string
+            enum: [password]
+          description: Тип grant — `password` для login по email/password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: hovhannisyankaro1992@gmail.com
+                password:
+                  type: string
+                  format: password
+                  example: MySecret123
+      responses:
+        '200':
+          description: Успешный логин — возвращены токены и user metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: JWT для использования в `Authorization: Bearer <jwt>` header
+                  token_type:
+                    type: string
+                    enum: [bearer]
+                  expires_in:
+                    type: integer
+                    description: Срок жизни access_token в секундах (обычно 3600)
+                  expires_at:
+                    type: integer
+                    description: Unix timestamp когда access_token истечёт
+                  refresh_token:
+                    type: string
+                    description: Токен для refresh access_token без повторного логина
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '400':
+          description: Невалидные email или password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '429':
+          description: Слишком много попыток входа — rate limit (30 sign-ins per 5 min per IP)
+
+  /auth/v1/signup:
+    post:
+      tags: [Auth]
+      summary: Зарегистрироваться по email и паролю
+      description: |
+        Создать нового юзера. После успешной регистрации **триггер `handle_new_user`** автоматически:
+        1. Создаёт строку в `public.profiles` с `display_name` из email local-part, `locale = 'en'`
+        2. Выдаёт **3 free credits** через `credits_transactions(amount=+3, reason='signup_bonus')`
+        3. Создаёт **default project** в `public.projects` с именем = сегодняшняя UTC дата (`YYYY-MM-DD`)
+
+        Email confirmation выключен в MVP — сессия активна сразу после signup, не нужно ждать письмо.
+
+        **После signup frontend обязан** записать acceptance ToS/Privacy через PATCH `/rest/v1/profiles` (см. Profile секцию).
+      security:
+        - AnonApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                  minLength: 6
+                data:
+                  type: object
+                  description: Произвольные user_metadata, например `{full_name: "..."}`. Trigger подхватит из `raw_user_meta_data.full_name` для `profiles.display_name`.
+      responses:
+        '200':
+          description: Юзер создан, сессия активна
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+                  session:
+                    type: object
+                    description: Идентично response 200 от /auth/v1/token
+        '400':
+          description: Невалидный email, password too weak, или email уже зарегистрирован
+        '422':
+          description: Password не соответствует минимальным требованиям
+
+  /auth/v1/recover:
+    post:
+      tags: [Auth]
+      summary: Запросить email для сброса пароля
+      description: |
+        Триггерит отправку письма от **Runpik <noreply@runpik.com>** (через Resend custom SMTP) со ссылкой для сброса пароля.
+
+        **Security best practice:** endpoint всегда возвращает 200, даже если email не зарегистрирован (не leak'ает существование аккаунтов).
+
+        Ссылка в письме ведёт на Supabase verify endpoint → редирект на `redirectTo` (по умолчанию `https://runpik.com`). Frontend должен detect recovery session через `AuthChangeEvent.passwordRecovery` и показать экран ввода нового пароля.
+      security:
+        - AnonApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                redirect_to:
+                  type: string
+                  format: uri
+                  description: |
+                    URL куда редиректнуть после успешного verify. Должен быть в whitelist Supabase (Site URL + Additional Redirect URLs). Сейчас allowed: `https://runpik.com/**`, `https://www.runpik.com/**`, `http://localhost:*`. Для Flutter deep links добавь свою scheme в whitelist через Dashboard.
+                  example: io.runpik://reset-password
+      responses:
+        '200':
+          description: Запрос принят (всегда 200 — security)
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {}
+
+  /auth/v1/logout:
+    post:
+      tags: [Auth]
+      summary: Выйти и инвалидировать refresh_token
+      description: |
+        Инвалидирует refresh_token на сервере (новый access_token нельзя получить). Access_token продолжает работать до своего expiry (~1 час максимум).
+
+        Frontend должен дополнительно очистить локальное состояние приложения и navigate на login screen.
+      responses:
+        '204':
+          description: Logout успешен (no content)
+
+  # ============================================================
+  # PROFILE
+  # ============================================================
+
+  /rest/v1/profiles:
+    get:
+      tags: [Profile]
+      summary: Получить свой профиль
+      description: |
+        Возвращает один row из `public.profiles` — твой собственный профиль. RLS гарантирует что юзер видит только свой профиль (`auth.uid() = id`).
+
+        Filter по `id=eq.{auth_uid}` обязателен (или PostgREST вернёт ВСЕ профили — но RLS отсеит до твоего, так что результат одинаковый).
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Filter `eq.{твой UID}`. Например `eq.dd254858-8b9c-474d-8eb8-d4c0e9540751`.
+          example: eq.dd254858-8b9c-474d-8eb8-d4c0e9540751
+        - in: query
+          name: select
+          schema:
+            type: string
+          description: Какие колонки вернуть. `*` для всех.
+          example: '*'
+      responses:
+        '200':
+          description: Array из одного row'а (даже если фильтр matched 0 — массив пустой, не ошибка)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+    patch:
+      tags: [Profile]
+      summary: Обновить свой профиль (locale, ToS/Privacy acceptance, display_name, avatar)
+      description: |
+        Обновляет один row в `public.profiles` — свой собственный. RLS гарантирует `auth.uid() = id`.
+
+        **Use cases:**
+        - Сохранить выбранный язык: `{locale: 'ru'}`
+        - Записать acceptance ToS/Privacy после signup или при re-acceptance: `{tos_accepted_at: '2026-05-22T10:00:00Z', privacy_accepted_at: '2026-05-22T10:00:00Z'}`
+        - Изменить display name или avatar: `{display_name: 'Karo', avatar_url: 'https://...'}`
+
+        Все поля optional — отправляй только то что хочешь обновить.
+
+        **Что НЕЛЬЗЯ обновлять через PostgREST:** `id`, `email` (управляется Supabase Auth), `role` (только superadmin через будущий `admin_set_role` RPC), `deletion_scheduled_at` (через RPC `schedule_my_account_deletion()`).
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Filter `eq.{твой UID}` — обновлять только свой row.
+          example: eq.dd254858-8b9c-474d-8eb8-d4c0e9540751
+        - in: header
+          name: Prefer
+          schema:
+            type: string
+            example: return=representation
+          description: '`return=representation` чтобы получить обновлённый row в response. Без него response пустой.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locale:
+                  type: string
+                  enum: [en, ru, hy]
+                  description: 'Язык интерфейса. `hy` (армянский) допустим в CHECK constraint, но UI translations пока не shipped.'
+                tos_accepted_at:
+                  type: string
+                  format: date-time
+                  description: ISO timestamp когда юзер принял Terms of Service.
+                privacy_accepted_at:
+                  type: string
+                  format: date-time
+                  description: ISO timestamp когда юзер принял Privacy Policy.
+                display_name:
+                  type: string
+                avatar_url:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Профиль обновлён
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+
+  # ============================================================
+  # PROJECTS
+  # ============================================================
+
+  /rest/v1/projects:
+    get:
+      tags: [Projects]
+      summary: Список моих проектов
+      description: |
+        Возвращает все projects текущего юзера. RLS отсеивает чужие (`auth.uid() = user_id`).
+
+        **Best-practice sort order:** `is_pinned DESC, sort_order ASC, created_at DESC`. Pinned projects всегда наверху, потом в порядке user-set sort_order, ties tie-breaker'ятся по recency.
+
+        В UI обычно показывается как drawer/sidebar.
+      parameters:
+        - in: query
+          name: select
+          schema:
+            type: string
+          example: '*'
+        - in: query
+          name: order
+          schema:
+            type: string
+          description: Best-practice ordering для UI sidebar
+          example: is_pinned.desc,sort_order.asc,created_at.desc
+      responses:
+        '200':
+          description: Массив projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      tags: [Projects]
+      summary: Создать новый проект
+      description: |
+        Создаёт project. **`user_id` авто-заполняется через DEFAULT auth.uid()** — не передавай его явно (передашь — должно совпадать с твоим JWT UID или RLS отклонит).
+
+        `name` обязателен, 1-30 символов (CHECK constraint).
+
+        После create — RLS позволит UPDATE/DELETE/SELECT этого row'а владельцу.
+      parameters:
+        - in: header
+          name: Prefer
+          schema:
+            type: string
+            example: return=representation
+          description: '`return=representation` чтобы получить созданный row с `id` в response.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 30
+                  example: Flowers
+                  description: Имя проекта 1-30 chars (CHECK constraint enforces).
+                is_pinned:
+                  type: boolean
+                  default: false
+                  description: Закреплён ли наверху списка.
+                is_public:
+                  type: boolean
+                  default: false
+                  description: 'Schema-only пока. RLS оставляет всё private до пер-image public/private flag.'
+                sort_order:
+                  type: integer
+                  default: 0
+      responses:
+        '201':
+          description: Project создан
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+        '400':
+          description: Имя пустое или длиннее 30 chars (CHECK constraint violation)
+        '403':
+          description: Попытка передать чужой `user_id`
+
+  /rest/v1/projects/update:
+    patch:
+      tags: [Projects]
+      summary: Переименовать / запинить / переставить project
+      description: |
+        Обновляет существующий project. Передавай только те поля что хочешь изменить. Все поля optional.
+
+        **Note:** этот URL — псевдо-path для документации. В реальности используется тот же `/rest/v1/projects?id=eq.{uuid}` с PATCH method (PostgREST convention).
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Filter `eq.{project_id}`
+          example: eq.a8d1c0e7-...
+        - in: header
+          name: Prefer
+          schema:
+            type: string
+            example: return=representation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 30
+                is_pinned:
+                  type: boolean
+                is_public:
+                  type: boolean
+                sort_order:
+                  type: integer
+      responses:
+        '200':
+          description: Project обновлён
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+
+  /functions/v1/delete-project:
+    post:
+      tags: [Projects]
+      summary: Удалить project (с blob cleanup и invariant maintenance)
+      description: |
+        Удаляет project + все его generations + Storage output blobs. **CASCADE на FK** удаляет generations rows автоматически; **этот Edge Function** удаляет blobs из Storage (PostgreSQL не может trogать Storage API).
+
+        **Analyses survive** — их `project_id` ставится в NULL через `ON DELETE SET NULL`. Cache analyses (per `user_id + image_hash`) переживает удаление project'а — это интенционально (Gemini вызовы дорогие).
+
+        **Invariant ">= 1 project":** если после удаления у юзера 0 projects, backend **автоматически** создаёт новый default project с именем = сегодняшняя UTC дата (response содержит `new_default_project`). Это значит `/analyze` и `/generate` могут trust invariant и не имеют fallback логики "у юзера 0 projects".
+
+        **Не используй прямой PostgREST DELETE на projects** — он удалит DB row но оставит orphaned blobs в Storage + сломает invariant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Project удалён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                    example: true
+                  project_id:
+                    type: string
+                    format: uuid
+                  blobs_deleted:
+                    type: integer
+                    description: Сколько output blobs было удалено из Storage
+                  new_default_project:
+                    type: object
+                    description: |
+                      Присутствует **только если** после deletion у юзера осталось 0 projects — backend auto-создал новый default с именем = today's UTC date. Frontend должен переключить UI на этот project.
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                        example: '2026-05-22'
+        '400':
+          description: Missing `project_id` в body
+        '403':
+          description: Project не принадлежит caller'у
+        '404':
+          description: Project не найден
+
+  /rest/v1/generations:
+    patch:
+      tags: [Projects]
+      summary: Переместить generation в другой project
+      description: |
+        Используется для feature "Move generation to other project". RLS проверяет ownership generation'а (`auth.uid() = user_id`). Новый `project_id` должен также принадлежать caller'у (FK + RLS check).
+
+        UI pattern: long-press на generation card → menu → "Переместить в..." → bottom sheet с projects → select → patch.
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Filter `eq.{generation_id}`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                  description: UUID нового project'а (должен принадлежать тебе же)
+      responses:
+        '200':
+          description: Generation moved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Generation'
+
+  # ============================================================
+  # AI PIPELINE
+  # ============================================================
+
+  /functions/v1/analyze:
+    post:
+      tags: [AI Pipeline]
+      summary: Stage 1 — анализ загруженного фото
+      description: |
+        **Первый шаг двухстадийного pipeline.** Вызывает Gemini Flash (vision) для распознавания продукта на фото и возвращает структурированный `ProductAnalysis` JSON, который потом используется в `/generate`.
+
+        **Бесплатный** — кредиты не списываются.
+
+        **Кешируется** по ключу `(user_id, image_hash, prompt_version)`. Image_hash — SHA-256 байтов файла. Повторный вызов с тем же image (например юзер пробует ещё раз с другими параметрами) возвращает мгновенно с `cached: true`, без обращения к Gemini.
+
+        **Critical: проверяй `analysis.is_suitable.verdict` перед /generate.** Если `verdict = false` — показывай экран "это изображение не подходит" с `is_suitable.blockers`, не вызывай `/generate` (там 422). `/analyze` всегда возвращает 200 при успешном вызове Gemini (verdict — бизнес-результат, не HTTP ошибка).
+
+        **Frontend flow:**
+        1. Загрузи фото в Storage: `inputs/{user_id}/{filename}.jpg`
+        2. Передай `input_image_path` сюда
+        3. Сохрани `analysis_id` для следующего шага
+        4. Покажи UI выбора shot_type на основе `recommended_shot_type` (default) + полного каталога из `/shot-types`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input_image_path]
+              properties:
+                input_image_path:
+                  type: string
+                  description: |
+                    Путь к фото внутри Storage bucket `inputs`. Должен начинаться с `{user.id}/`.
+                  example: dd254858-8b9c-474d-8eb8-d4c0e9540751/IMG_test.jpg
+                project_id:
+                  type: string
+                  format: uuid
+                  description: |
+                    UUID проекта в `public.projects`. Optional — если не передал, backend использует первый проект юзера (sorted by `is_pinned DESC, sort_order, created_at DESC`). Invariant гарантирует >= 1 project.
+                force_reanalyze:
+                  type: boolean
+                  default: false
+                  description: |
+                    Если `true`, обходит кеш `analyses` и заново зовёт Gemini. Используется когда хочешь пересмотреть анализ.
+      responses:
+        '200':
+          description: Анализ успешен. **ВАЖНО — проверяй `analysis.is_suitable.verdict`** прежде чем переходить к `/generate`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analysis_id:
+                    type: string
+                    format: uuid
+                    description: UUID строки в `analyses`. Передавай в `/generate`.
+                  analysis:
+                    $ref: '#/components/schemas/ProductAnalysis'
+                  cached:
+                    type: boolean
+                    description: '`true` если результат из кеша (повторный вызов с тем же image).'
+        '400':
+          description: Malformed JSON или отсутствует `input_image_path`
+        '403':
+          description: '`input_image_path` не начинается с `{user.id}/` (попытка прочитать чужой файл)'
+        '404':
+          description: Input image не найден в bucket
+        '502':
+          description: Gemini Flash text fetch не удался / пустой ответ / невалидный JSON
+
+  /functions/v1/generate:
+    post:
+      tags: [AI Pipeline]
+      summary: Stage 2 — генерация изображения
+      description: |
+        **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/analyze`, строит Stage 2 prompt, вызывает Gemini Flash Image, загружает output в `outputs` bucket, возвращает signed URL.
+
+        **Списывает 1 кредит** через append-only ledger `credits_transactions`. Refund (отдельная запись `+1`) при определённых сбоях:
+        - 400 prompt build error (shot_type не существует в категории)
+        - 500 Storage upload fail
+        - 502 Gemini Image non-2xx или пустой ответ
+
+        **Длительная операция:** 8 сек в mock mode, 10-30 сек реальный Gemini. Показывай loading state с прогрессом.
+
+        **Verdict recheck:** если `analysis.is_suitable.verdict = false` — возвращает 422 **без charge'а кредита**. Defense-in-depth на случай если frontend пропустил blockers в `/analyze` response.
+
+        **Mock mode (текущий MVP state):** response содержит `"mock": true`. Output = input bytes (8 sec sleep для имитации latency). Чтобы переключиться на real Gemini — нужно enable Gemini Image billing на Google Cloud + убрать env var `RUNPIK_MOCK_GENERATION`.
+
+        **Output URL TTL:** 1 час. Сохрани `output_path` чтобы перегенерировать signed URL потом через Storage SDK.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [analysis_id]
+              properties:
+                analysis_id:
+                  type: string
+                  format: uuid
+                  description: UUID анализа из `/analyze` response
+                shot_type:
+                  type: string
+                  description: |
+                    Slug типа кадра. Optional — если NULL, используется `analysis.regeneration_guidance.recommended_shot_type`, потом первый ключ в `SHOT_TYPE_BLOCKS[category]`. См. `/shot-types` endpoint для полного каталога.
+                  example: catalog_studio
+                user_text:
+                  type: string
+                  maxLength: 300
+                  description: 'Свободный текст от пользователя. Включается в Stage 2 prompt как "soft preference". Санитизация: strips ``<>{}[]```, prompt injection patterns, обрезает до 300 chars.'
+                lighting:
+                  $ref: '#/components/schemas/Lighting'
+                aspect_ratio:
+                  $ref: '#/components/schemas/AspectRatio'
+                project_id:
+                  type: string
+                  format: uuid
+                  description: |
+                    UUID проекта. Optional — priority резолва: explicit `project_id` > `analysis.project_id` > первый project юзера. Generation row всегда несёт `project_id` (NOT NULL).
+      responses:
+        '200':
+          description: Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResponse'
+        '400':
+          description: Malformed JSON / missing analysis_id / invalid lighting или aspect_ratio slug
+        '402':
+          description: Недостаточно кредитов (`balance < 1`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Insufficient credits
+                  balance:
+                    type: integer
+                    example: 0
+        '403':
+          description: '`analyses.user_id !== auth.uid()` — анализ не твой'
+        '404':
+          description: '`analysis_id` не найден или input image удалён между /analyze и /generate'
+        '422':
+          description: 'Verdict recheck failed — `analysis.is_suitable.verdict = false`. **Кредит НЕ списан.**'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  blockers:
+                    type: array
+                    items:
+                      type: string
+                  analysis_id:
+                    type: string
+                    format: uuid
+        '500':
+          description: 'DB error / Storage upload fail (refund issued) / Signed URL fail (NO refund — generation уже done)'
+        '502':
+          description: 'Gemini Image non-2xx или ответ без inline data. **Refund issued.**'
+
+  /functions/v1/shot-types:
+    get:
+      tags: [AI Pipeline]
+      summary: Каталог 28 типов кадров с i18n labels
+      description: |
+        Публичный read-only endpoint — каталог 28 shot types (7 категорий × 4 типа в каждой) с локализованными labels. Используется фронтом для рендера Shot Type Selection screen после `/analyze`.
+
+        **No auth required** — `verify_jwt = false`. Cache `public, max-age=3600` (1 час edge CDN).
+
+        Backend-prompt-only поля (scene, framing, lighting, avoid_extras, angle_priority, final_check_extras) **не возвращаются** — они English-only для Gemini, фронту не нужны. Возвращаются только UI-relevant `label` + `description`.
+
+        **Frontend pattern:** агрессивно кешируй (1 час CDN + клиентский кеш в SharedPreferences до bump'а app version). Не запрашивай каждый раз когда юзер открывает Shot Type Selection screen.
+      security: []
+      parameters:
+        - in: query
+          name: locale
+          schema:
+            type: string
+            enum: [en, ru]
+            default: en
+          description: |
+            Локаль для `label` и `description`. Unsupported value (e.g. `hy`) → fallback на `en` + `fallback_used: true` в response.
+      responses:
+        '200':
+          description: Каталог shot types
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=3600
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shot_types:
+                    type: object
+                    description: 'Category slug → массив `{slug, label, description}` для этой категории (4 типа в каждой)'
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          slug:
+                            type: string
+                          label:
+                            type: string
+                          description:
+                            type: string
+                  categories:
+                    type: object
+                    description: 'Category slug → human-name на выбранной локали ("Одежда и обувь" / "Clothing & Footwear")'
+                    additionalProperties:
+                      type: string
+                  locale:
+                    type: string
+                    enum: [en, ru]
+                  fallback_used:
+                    type: boolean
+                    description: '`true` если `?locale=` был unsupported → fallback на `en`'
+
+  # ============================================================
+  # ADMIN
+  # ============================================================
+
+  /functions/v1/admin:
+    get:
+      tags: [Admin]
+      summary: Index доступных admin endpoints
+      description: |
+        Возвращает список всех admin endpoints + текущую phase (1 = read-only).
+
+        **Auth requirement:** `profiles.role = 'superadmin'`. Не-superadmin → 403.
+
+        Phase 2+ добавит mutating endpoints (set_role, grant_credits, force_delete) которые будут писать в `admin_audit_log`.
+      responses:
+        '200':
+          description: Index admin endpoints
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  available_endpoints:
+                    type: array
+                    items:
+                      type: string
+                  phase:
+                    type: string
+                    example: '1 (read-only config inspection)'
+                  notes:
+                    type: string
+        '403':
+          description: 'Forbidden — `profiles.role != ''superadmin''`'
+
+  /functions/v1/admin/prompts/analyze:
+    get:
+      tags: [Admin]
+      summary: Stage 1 prompt + model + version
+      description: 'Returns текущий `STAGE_1_PROMPT` (вся ~70 строк), name модели Gemini, prompt_version (для cache invalidation key).'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  model:
+                    type: string
+                    example: gemini-2.5-flash
+                  prompt_version:
+                    type: string
+                    example: v1.0
+                  prompt:
+                    type: string
+                    description: Полный текст Stage 1 prompt'а (long string)
+                  notes:
+                    type: string
+        '403':
+          description: Not superadmin
+
+  /functions/v1/admin/prompts/generate:
+    get:
+      tags: [Admin]
+      summary: Stage 2 template + model
+      description: 'Returns `STAGE_2_TEMPLATE` raw template с `{placeholder}` токенами. Toxens fill at runtime per (category, shot_type, lighting, user_text) — см. `generate/prompt-builder.ts` assembly logic.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  model:
+                    type: string
+                  template:
+                    type: string
+                  notes:
+                    type: string
+
+  /functions/v1/admin/categories:
+    get:
+      tags: [Admin]
+      summary: 7 категорий с UI names (en/ru) + Gemini-prompt names
+      description: |
+        Returns slugs всех 7 категорий + UI names на en/ru ("Clothing & Footwear" / "Одежда и обувь") + Gemini-prompt names ("Clothing and footwear" — для natural prose в Stage 2 prompt).
+
+        Разные форматирования намеренно — UI vs LLM audiences.
+      responses:
+        '200':
+          description: OK
+
+  /functions/v1/admin/languages:
+    get:
+      tags: [Admin]
+      summary: Поддерживаемые локали
+      description: 'Returns три списка: supported by `/shot-types` (`en`, `ru`), allowed by `profiles.locale` CHECK (`en`, `ru`, `hy`), `LocalizedString` keys. `hy` — partially supported (schema allows, UI translations не shipped).'
+      responses:
+        '200':
+          description: OK
+
+  /functions/v1/admin/shot-types:
+    get:
+      tags: [Admin]
+      summary: Full SHOT_TYPE_BLOCKS dict (все 28 блоков)
+      description: |
+        Heavy response (~650 строк JSON). 28 blocks с полными internal fields (scene, framing, lighting, avoid_extras, angle_priority, final_check_extras) которые `/shot-types` endpoint НЕ отдаёт (они English-only для Gemini).
+      responses:
+        '200':
+          description: OK
+
+  /functions/v1/admin/lighting:
+    get:
+      tags: [Admin]
+      summary: 4 lighting profiles с полной prose
+      description: '4 profiles (`daylight`, `studio`, `sunset`, `rim`) — slugs + полные prose описания. Юзер опционально выбирает один в `/generate` body → backend заменяет default lighting блока на этот.'
+      responses:
+        '200':
+          description: OK
+
+  /functions/v1/admin/aspect-ratios:
+    get:
+      tags: [Admin]
+      summary: 5 Runpik-allowed + 10 Gemini-supported aspect ratios
+      description: |
+        Gemini supports 10 значений: `21:9, 16:9, 4:3, 3:2, 1:1, 9:16, 3:4, 2:3, 5:4, 4:5`.
+        Runpik UI намеренно ограничен 5: `16:9, 4:3, 1:1, 3:4, 9:16` — для consistency.
+        Передаётся в Gemini как `imageConfig.aspectRatio` (camelCase REST).
+      responses:
+        '200':
+          description: OK
+
+  /functions/v1/admin/runtime-config:
+    get:
+      tags: [Admin]
+      summary: 'Runtime config: mock mode, model names, TTLs, credits'
+      description: |
+        Главный health-check endpoint admin'а. Возвращает все runtime constants одним JSON'ом:
+        - `mock_mode` — критичный флаг (если `true`, backend в mock-режиме, реальная Gemini генерация не работает)
+        - `prompt_version` — для cache invalidation analyses
+        - `gemini_text_model` / `gemini_image_model` — какие модели используются
+        - `signed_url_ttl_seconds` — TTL signed URLs (1 час)
+        - `credits_per_generation` — 1
+        - `signup_bonus_credits` — 3
+        - `deletion_grace_period_days` — 7
+      responses:
+        '200':
+          description: Runtime config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeConfig'
+
+  /functions/v1/admin/admins:
+    get:
+      tags: [Admin]
+      summary: Список юзеров с role != 'user' (admins + superadmins)
+      description: |
+        Returns всех юзеров у которых `profiles.role` в (`'admin'`, `'superadmin'`). Sorted superadmin first, потом admins по `created_at ASC` (старейшие первыми).
+
+        Useful для admin UI tab "Admin team". Empty list невозможен — invariant что Karo всегда superadmin.
+
+        Future: будет `GET /admin/users` с pagination и filter для полного списка users (Phase 2+).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  admins:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUserSummary'
+                  total:
+                    type: integer
+                  notes:
+                    type: string
+
+  /functions/v1/admin/audit-log:
+    get:
+      tags: [Admin]
+      summary: Recent admin actions (append-only ledger)
+      description: |
+        Returns recent entries из `admin_audit_log` таблицы. Phase 1 пустой (нет mutating endpoints).
+
+        Phase 2+ mutating actions (set_role, grant_credits, force_delete) будут писать сюда `before+after` payload + result + admin_user_id + timestamp.
+
+        Append-only — никогда UPDATE/DELETE. Compliance + debugging + retroactive policy review.
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: Сколько recent entries вернуть (1-200)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLogEntry'
+                  limit:
+                    type: integer
+                  total_returned:
+                    type: integer
+                  notes:
+                    type: string
+
+  # ============================================================
+  # RPCs
+  # ============================================================
+
+  /rest/v1/rpc/get_my_credits_balance:
+    post:
+      tags: [RPCs]
+      summary: Получить мой баланс кредитов
+      description: |
+        Returns SUM amount из `credits_transactions` для текущего юзера. Балnance может быть отрицательным теоретически (если refund'ы > charge'ов — не должно быть), но в норме >= 0.
+
+        В Flutter: `final balance = await supabase.rpc('get_my_credits_balance');`
+
+        **Important:** RPC использует `auth.uid()` — работает только из authenticated PostgREST context (не из service_role).
+      responses:
+        '200':
+          description: Текущий баланс
+          content:
+            application/json:
+              schema:
+                type: integer
+                example: 3
+
+  /rest/v1/rpc/schedule_my_account_deletion:
+    post:
+      tags: [RPCs]
+      summary: Запланировать удаление аккаунта (7-day grace period)
+      description: |
+        Помечает `profiles.deletion_scheduled_at = now()`. Через **7 дней** daily cron `process-account-deletions` удалит юзера (auth.users.delete + CASCADE → profiles, projects, generations, analyses, credits_transactions + Storage blobs).
+
+        **Идемпотентна:** повторные вызовы НЕ сбрасывают countdown — `COALESCE(deletion_scheduled_at, now())`.
+
+        Используется в "Settings → Delete my account" flow Flutter app.
+      responses:
+        '200':
+          description: ISO-8601 timestamp когда deletion был запланирован
+          content:
+            application/json:
+              schema:
+                type: string
+                format: date-time
+
+  /rest/v1/rpc/cancel_my_account_deletion:
+    post:
+      tags: [RPCs]
+      summary: Отменить запланированное удаление аккаунта
+      description: 'Set `profiles.deletion_scheduled_at = NULL`. Аккаунт остаётся active.'
+      responses:
+        '200':
+          description: void (deletion отменён)
+
+# ============================================================
+# COMPONENTS — Reusable schemas, security
+# ============================================================
+
+components:
+  securitySchemes:
+    BearerJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT залогиненного юзера. Получается через `POST /auth/v1/token?grant_type=password`. Срок жизни ~1 час, supabase-flutter SDK автоматически refresh'ит через refresh_token.
+        В Postman: сохрани access_token в env variable через Tests script после sign-in, используй как `Authorization: Bearer {{access_token}}`.
+    AnonApiKey:
+      type: apiKey
+      in: header
+      name: apikey
+      description: |
+        Анонимный JWT проекта (публичный). Получить через Supabase Dashboard → Project Settings → API → `anon` public. Безопасно вшивать в client — защита данных через RLS, не через секретность ключа.
+        В Postman: `apikey: {{anon_key}}` в env variable.
+
+  schemas:
+
+    # ---- Enums ----
+
+    ProductCategory:
+      type: string
+      enum:
+        - clothing_footwear
+        - accessories
+        - food_drinks
+        - cosmetics
+        - electronics
+        - home_furniture
+        - other
+      description: '7 фиксированных категорий продуктов. Список enforced в трёх местах синхронно: Stage 1 prompt, `ProductCategory` TypeScript type, `SHOT_TYPE_BLOCKS` keys.'
+
+    PreservationPriority:
+      type: string
+      enum:
+        - logo_and_text
+        - exact_colors
+        - shape_and_proportions
+        - material_texture
+        - overall
+      description: 'Какой аспект продукта наиболее критично сохранить при регенерации.'
+
+    Lighting:
+      type: string
+      enum: [daylight, studio, sunset, rim]
+      description: 'User-selectable lighting profile. Optional в `/generate` body. Если передан — заменяет default lighting prose шот-тайпа. NULL = дефолт блока.'
+
+    AspectRatio:
+      type: string
+      enum: ['16:9', '4:3', '1:1', '3:4', '9:16']
+      description: 'User-selectable aspect ratio. Optional в `/generate` body. Прокидывается в Gemini как `imageConfig.aspectRatio` (camelCase REST). NULL = Gemini auto-detect из input image.'
+
+    SupportedLocale:
+      type: string
+      enum: [en, ru]
+      description: 'Locales поддерживаемые `/shot-types` endpoint. `profiles.locale` CHECK дополнительно allows `hy` но UI translations пока не shipped.'
+
+    UserRole:
+      type: string
+      enum: [user, admin, superadmin]
+      description: |
+        RBAC role. Default `user` для всех новых юзеров.
+        - `user` — regular user (most юзеров). Видит только свои данные через RLS.
+        - `admin` — будущий moderator (Phase 2+, пока не присваивается)
+        - `superadmin` — god-level access. Может вызывать `/admin/*` endpoints. Manual UPDATE только (never self-service).
+
+    LocalizedString:
+      type: object
+      description: 'Локализованная строка. `en` — required canonical, `ru` и `hy` — optional fallback на `en`.'
+      properties:
+        en:
+          type: string
+        ru:
+          type: string
+        hy:
+          type: string
+      required: [en]
+
+    # ---- Auth ----
+
+    AuthUser:
+      type: object
+      description: 'Юзер из Supabase Auth. ID совпадает с `profiles.id`.'
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+        last_sign_in_at:
+          type: string
+          format: date-time
+        user_metadata:
+          type: object
+          description: 'Произвольные данные из `data` поля signup'а (e.g. `full_name`).'
+
+    AuthErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        error_description:
+          type: string
+        msg:
+          type: string
+
+    # ---- Profile ----
+
+    Profile:
+      type: object
+      description: 'Профиль юзера. Один row на одного `auth.users`. Создаётся `handle_new_user` триггером на signup.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 'FK на `auth.users.id`, cascade delete. Совпадает с твоим JWT UID.'
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+          description: 'Из `raw_user_meta_data.full_name` или email local-part.'
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+        locale:
+          type: string
+          enum: [en, ru, hy]
+        role:
+          $ref: '#/components/schemas/UserRole'
+        tos_accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 'NULL до acceptance. Записывается фронтом через PostgREST UPDATE после signup или re-acceptance.'
+        privacy_accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        deletion_scheduled_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 'NULL = активный. Set через RPC `schedule_my_account_deletion()`. Через 7 дней cron удалит юзера.'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ---- Projects ----
+
+    Project:
+      type: object
+      description: 'Workspace-like группировка. Каждая generation/analysis принадлежит project''у. У юзера всегда >= 1 (invariant).'
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          description: 'Auto-filled через DEFAULT auth.uid() — фронту передавать НЕ нужно.'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 30
+          description: 'User-editable. CHECK constraint 1-30 chars. Default = today UTC date "YYYY-MM-DD".'
+        is_pinned:
+          type: boolean
+          default: false
+          description: 'Pinned projects всплывают наверху списка. Best-practice query: `ORDER BY is_pinned DESC, sort_order, created_at DESC`.'
+        is_public:
+          type: boolean
+          default: false
+          description: 'Schema-only пока. RLS оставляет всё private до per-image `generations.is_public` shipnет.'
+        sort_order:
+          type: integer
+          default: 0
+          description: 'User drag-and-drop sort. Integer (можешь использовать gaps 10, 20, 30 для удобства insert'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Generation:
+      type: object
+      description: 'Одна попытка генерации (успех или сбой). Создаётся в `/generate`.'
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+          description: 'NOT NULL — каждая generation принадлежит project''у. ON DELETE CASCADE.'
+        analysis_id:
+          type: string
+          format: uuid
+          description: 'FK на `analyses.id`. Set null при удалении analysis.'
+        shot_type:
+          type: string
+        user_text:
+          type: string
+          nullable: true
+        lighting:
+          allOf:
+            - $ref: '#/components/schemas/Lighting'
+          nullable: true
+        aspect_ratio:
+          allOf:
+            - $ref: '#/components/schemas/AspectRatio'
+          nullable: true
+        status:
+          type: string
+          enum: [pending, processing, done, failed]
+        input_image_path:
+          type: string
+          description: 'Путь в `inputs` bucket. Копия из analyses row.'
+        output_image_path:
+          type: string
+          nullable: true
+          description: 'Путь в `outputs` bucket: `{user_id}/{generation_id}.jpg`. NULL для failed.'
+        prompt_used:
+          type: string
+          nullable: true
+          description: 'Финальный Stage 2 prompt. NULL в mock-режиме (полезно как маркер) и для failed rows.'
+        error_message:
+          type: string
+          nullable: true
+          description: 'Заполняется при `status=failed`. Для Gemini ошибок — содержит первые 500 байт response body.'
+        credits_charged:
+          type: integer
+          default: 1
+        created_at:
+          type: string
+          format: date-time
+
+    # ---- ProductAnalysis (the big one) ----
+
+    ProductAnalysis:
+      type: object
+      description: |
+        Структурированный JSON возвращаемый Gemini Flash text в Stage 1. Контракт между `/analyze` и `/generate`.
+      properties:
+        product:
+          type: object
+          properties:
+            category:
+              $ref: '#/components/schemas/ProductCategory'
+            category_confidence:
+              type: integer
+              minimum: 0
+              maximum: 100
+            subcategory:
+              type: string
+              description: 'Свободный текст, e.g. "honey layer cake"'
+            name_guess:
+              type: string
+              description: 'Короткое визуальное описание'
+        appearance:
+          type: object
+          properties:
+            primary_colors:
+              type: array
+              items:
+                type: string
+            secondary_colors:
+              type: array
+              items:
+                type: string
+            materials:
+              type: array
+              items:
+                type: string
+            texture:
+              type: string
+            shape:
+              type: string
+            distinctive_features:
+              type: array
+              items:
+                type: string
+              description: 'MUST-PRESERVE элементы с деталями и локацией'
+            text_on_product:
+              type: string
+              description: 'Дословный текст или строка `"none"`'
+        current_state:
+          type: object
+          properties:
+            orientation_in_photo:
+              type: string
+            framing:
+              type: string
+            background_quality:
+              type: string
+            lighting_quality:
+              type: string
+            color_cast:
+              type: string
+            issues_to_fix:
+              type: array
+              items:
+                type: string
+              description: 'Проблемы которые regeneration должна решить'
+        regeneration_guidance:
+          type: object
+          properties:
+            preservation_priority:
+              $ref: '#/components/schemas/PreservationPriority'
+            tricky_aspects:
+              type: array
+              items:
+                type: string
+            recommended_shot_type:
+              type: string
+              description: 'Лучший slug из category-specific списка'
+            recommended_shot_type_reasoning:
+              type: string
+            alternative_shot_types:
+              type: array
+              items:
+                type: string
+              description: '1-2 допустимые альтернативы'
+        is_suitable:
+          type: object
+          description: 'КРИТИЧЕСКОЕ поле. Frontend должен проверять `verdict` перед `/generate`.'
+          properties:
+            verdict:
+              type: boolean
+              description: |
+                **`false` → /analyze всё равно вернёт 200**, но `/generate` вернёт 422.
+                Frontend должен показать blockers screen и НЕ переходить к генерации.
+            confidence:
+              type: integer
+              minimum: 0
+              maximum: 100
+            warnings:
+              type: array
+              items:
+                type: string
+              description: 'Возвращаются юзеру даже при `verdict=true`'
+            blockers:
+              type: array
+              items:
+                type: string
+              description: 'Populated только когда `verdict=false`'
+
+    # ---- /generate response ----
+
+    GenerateResponse:
+      type: object
+      properties:
+        generation_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: string
+          format: uuid
+        output_url:
+          type: string
+          format: uri
+          description: 'Signed URL на сгенерированную картинку. **TTL 1 час.** После expiry — обновляй через `supabase.storage.from(''outputs'').createSignedUrl(output_path, 3600)`.'
+        output_path:
+          type: string
+          description: 'Путь внутри `outputs` bucket. Сохрани чтобы перегенерировать signed URL потом.'
+          example: dd254858-.../9c2f8a-...jpg
+        expires_in_seconds:
+          type: integer
+          example: 3600
+        warnings:
+          type: array
+          items:
+            type: string
+          description: 'Копия `analysis.is_suitable.warnings` — frontend может показать юзеру.'
+        credits_remaining:
+          type: integer
+          description: 'Баланс после списания.'
+        mock:
+          type: boolean
+          description: |
+            **Поле присутствует ТОЛЬКО когда backend в mock-режиме** (`RUNPIK_MOCK_GENERATION=true`).
+            В production когда billing включён — поля не будет в response.
+            Frontend может использовать для UI-бейджа "MOCK" в QA builds.
+
+    # ---- Admin ----
+
+    AdminUserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/UserRole'
+        display_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    RuntimeConfig:
+      type: object
+      properties:
+        supabase_project_ref:
+          type: string
+          example: wnbtsqfdlbjwtetppdng
+        mock_mode:
+          type: boolean
+          description: '**Критичный флаг.** Если `true`, реальная Gemini генерация не работает — `/generate` возвращает копию input bytes.'
+        prompt_version:
+          type: string
+          example: v1.0
+        gemini_text_model:
+          type: string
+          example: gemini-2.5-flash
+        gemini_image_model:
+          type: string
+          example: gemini-2.5-flash-image
+        signed_url_ttl_seconds:
+          type: integer
+          example: 3600
+        credits_per_generation:
+          type: integer
+          example: 1
+        signup_bonus_credits:
+          type: integer
+          example: 3
+        deletion_grace_period_days:
+          type: integer
+          example: 7
+
+    AuditLogEntry:
+      type: object
+      description: 'Append-only ledger row для admin actions. Phase 1 эти rows не создаются (нет mutating endpoints). Phase 2+ будут.'
+      properties:
+        id:
+          type: string
+          format: uuid
+        admin_user_id:
+          type: string
+          format: uuid
+          description: 'Кто выполнил action (admin/superadmin)'
+        action:
+          type: string
+          description: 'Action slug — `set_role`, `grant_credits`, `force_delete_user`, etc.'
+        target_user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 'Чьи данные были затронуты'
+        target_resource:
+          type: string
+          nullable: true
+          description: 'Free-form resource identifier — `project:<uuid>`, etc.'
+        payload:
+          type: object
+          description: 'Полные params/body admin action'
+        result:
+          type: object
+          nullable: true
+          description: 'Before/after state, error message, и т.д.'
+        ip_address:
+          type: string
+        user_agent:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # ---- Errors ----
+
+    ErrorResponse:
+      type: object
+      description: 'Стандартная error response от Edge Functions.'
+      properties:
+        error:
+          type: string
+          description: 'Сообщение об ошибке'
+        detail:
+          type: string
+          description: 'Опционально — детали для 400 errors'
