@@ -10,7 +10,7 @@ info:
     ## Архитектура
 
     - **Supabase Cloud** (project ref `wnbtsqfdlbjwtetppdng`, регион `eu-central-1` Frankfurt)
-    - **5 Edge Functions:** `/analyze`, `/generate`, `/shot-types`, `/delete-project`, `/admin`
+    - **7 Edge Functions:** `/analyze`, `/generate`, `/shot-types`, `/delete-project`, `/delete-generation`, `/admin`, `/process-account-deletions`
     - **Google Gemini API** — `gemini-2.5-flash` для vision/text, `gemini-2.5-flash-image` для генерации
     - **Storage buckets:** `inputs` (приватный, 10 MiB max), `outputs` (приватный, signed URL TTL 1 час)
 
@@ -544,6 +544,58 @@ paths:
           description: Project не принадлежит caller'у
         '404':
           description: Project не найден
+
+  /functions/v1/delete-generation:
+    post:
+      tags: [AI Pipeline]
+      summary: Удалить одну generation (с blob cleanup)
+      description: |
+        Удаляет одну конкретную generation — row в `generations` table + output blob в Storage. Используется для UI feature "Delete photo" (юзер удаляет один сгенерированный output, не весь project).
+
+        **Что удаляется:**
+        - Row в `public.generations`
+        - Blob `outputs/{user_id}/{generation_id}.jpg` в Storage
+
+        **Что PRESERVED:**
+        - **Analysis row** (cached AI work — Gemini Flash text call). `generations.analysis_id` имеет `ON DELETE SET NULL`, сама analysis row survives. Cache валиден по `(user_id, image_hash)` — юзер может re-generate того же фото без повторного payment'a за анализ.
+        - **Input blob** (`inputs/{user_id}/IMG_xyz.jpg`) — same input может иметь несколько generations.
+        - **Credits ledger** (`credits_transactions` row с `reason='generation'`) — append-only, never deleted. Generation была успешно delivered → credit заслуженно списан. **No refund** (delete is user choice, not failure).
+
+        **Не используй PostgREST DELETE на generations** — нет RLS DELETE policy, plus orphan blobs в Storage. Этот Edge Function — единственный правильный способ.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [generation_id]
+              properties:
+                generation_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Generation удалена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                    example: true
+                  generation_id:
+                    type: string
+                    format: uuid
+                  blob_deleted:
+                    type: boolean
+                    description: '`true` если output blob successfully removed; `false` если blob был NULL (failed generation) или Storage delete fail (best-effort — orphan blob может быть swept future cleanup cron''ом).'
+        '400':
+          description: Missing `generation_id` в body / invalid JSON
+        '403':
+          description: Generation не принадлежит caller'у
+        '404':
+          description: Generation не найдена
 
   /rest/v1/generations:
     patch:
