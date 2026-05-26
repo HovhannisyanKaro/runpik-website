@@ -10,7 +10,7 @@ info:
     ## Архитектура
 
     - **Supabase Cloud** (project ref `wnbtsqfdlbjwtetppdng`, регион `eu-central-1` Frankfurt)
-    - **7 Edge Functions:** `/analyze`, `/generate`, `/shot-types`, `/delete-project`, `/delete-generation`, `/admin`, `/process-account-deletions`
+    - **8 Edge Functions:** `/analyze`, `/generate`, `/shot-types`, `/faq`, `/delete-project`, `/delete-generation`, `/admin`, `/process-account-deletions`
     - **Google Gemini API** — `gemini-2.5-flash` для vision/text, `gemini-2.5-flash-image` для генерации
     - **Storage buckets:** `inputs` (приватный, 10 MiB max), `outputs` (приватный, signed URL TTL 1 час)
 
@@ -861,6 +861,76 @@ paths:
                   fallback_used:
                     type: boolean
                     description: '`true` если `?locale=` был unsupported → fallback на `en`'
+
+  /functions/v1/faq:
+    get:
+      tags: [AI Pipeline]
+      summary: Marketing FAQ items (public, i18n)
+      description: |
+        Публичный read-only endpoint — список marketing FAQ items для runpik.com/faq + Flutter app FAQ screen.
+
+        **No auth required** — `verify_jwt = false`. Cache `public, max-age=300` (5 min edge CDN — FAQ rarely changes).
+
+        Same pattern как `/shot-types`: locale-aware с per-item fallback. Если у item NULL для requested locale, возвращается `en` для этого item (остальные items получают свою локаль если присутствует).
+
+        Server filters `is_enabled = true` через RLS + sorts by `sort_order ASC, created_at ASC`. Answer field может содержать Markdown (`**bold**`, `[link](url)`) — frontend должен render.
+
+        **Frontend pattern:** кеш можно агрессивно (5 min CDN + клиентский localStorage). Pull-to-refresh re-fetches при необходимости.
+      security: []
+      parameters:
+        - in: query
+          name: locale
+          schema:
+            type: string
+            enum: [en, ru]
+            default: en
+          description: |
+            Локаль для `question` + `answer`. Unsupported value → fallback на `en` с `fallback_used: true`.
+      responses:
+        '200':
+          description: Массив enabled FAQ items
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=300
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  faqs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        slug:
+                          type: string
+                          description: 'URL-friendly identifier для deep-linking (e.g. `runpik.com/faq#marketplaces`)'
+                          example: marketplaces
+                        question:
+                          type: string
+                          description: 'Локализованный вопрос (resolved для выбранной локали с en fallback per item)'
+                        answer:
+                          type: string
+                          description: 'Локализованный ответ. Может содержать Markdown — `**bold**`, `[link](url)`.'
+                        category:
+                          type: string
+                          nullable: true
+                          description: 'Optional group (NULL для MVP)'
+                        sort_order:
+                          type: integer
+                          description: 'Admin-controlled order'
+                  locale:
+                    type: string
+                    enum: [en, ru]
+                  fallback_used:
+                    type: boolean
+                  total:
+                    type: integer
 
   # ============================================================
   # ADMIN

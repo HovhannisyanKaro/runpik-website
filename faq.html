@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAQ — Runpik</title>
+  <meta name="description" content="Frequently asked questions about Runpik — AI product photography for marketplaces.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <a href="index.html" class="logo">Runpik</a>
+  </header>
+
+  <main class="faq">
+    <h1 id="faq-title">Frequently Asked Questions</h1>
+    <p class="subtitle" id="faq-subtitle">Everything you need to know about Runpik. Tap a question to expand.</p>
+
+    <div class="locale-toggle" role="group" aria-label="Language">
+      <button type="button" data-locale="en" class="active">English</button>
+      <button type="button" data-locale="ru">Русский</button>
+    </div>
+
+    <div id="faq-list" class="faq-list">
+      <div class="faq-loading">Loading…</div>
+    </div>
+  </main>
+
+  <footer>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="terms.html">Terms of Service</a>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="api-docs/">API docs</a>
+    </nav>
+    <p class="copyright">&copy; 2026 Runpik. All rights reserved.</p>
+  </footer>
+
+  <script>
+    (function () {
+      const API_BASE = 'https://wnbtsqfdlbjwtetppdng.functions.supabase.co';
+      const STORAGE_KEY = 'runpik_faq_locale';
+
+      // Localized UI strings (page chrome — separate from FAQ items themselves)
+      const I18N = {
+        en: {
+          title: 'Frequently Asked Questions',
+          subtitle: 'Everything you need to know about Runpik. Tap a question to expand.',
+          loading: 'Loading…',
+          error: "Couldn't load FAQ. Please try again later.",
+          empty: 'No FAQ items yet.',
+        },
+        ru: {
+          title: 'Часто задаваемые вопросы',
+          subtitle: 'Всё, что нужно знать о Runpik. Нажмите на вопрос, чтобы развернуть ответ.',
+          loading: 'Загрузка…',
+          error: 'Не удалось загрузить FAQ. Попробуйте позже.',
+          empty: 'Пока нет вопросов.',
+        },
+      };
+
+      function detectInitialLocale() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === 'ru' || saved === 'en') return saved;
+        const browser = (navigator.language || 'en').toLowerCase();
+        if (browser.startsWith('ru')) return 'ru';
+        return 'en';
+      }
+
+      function setActiveButton(locale) {
+        document.querySelectorAll('.locale-toggle button').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.locale === locale);
+        });
+      }
+
+      function setPageChrome(locale) {
+        document.documentElement.lang = locale;
+        document.getElementById('faq-title').textContent = I18N[locale].title;
+        document.getElementById('faq-subtitle').textContent = I18N[locale].subtitle;
+      }
+
+      // Minimal markdown link parser: [text](url) → <a href="url">text</a>
+      // Plus **bold** → <strong>bold</strong>.
+      // Anything else escaped via textContent.
+      function escapeHtml(s) {
+        return s
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function renderMarkdown(text) {
+        let html = escapeHtml(text);
+        // Markdown links [text](url) — only http(s) URLs allowed
+        html = html.replace(
+          /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+          (_, label, href) =>
+            `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`
+        );
+        // Bold **text**
+        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        return html;
+      }
+
+      function renderFaqs(locale, faqs) {
+        const list = document.getElementById('faq-list');
+        if (!faqs || faqs.length === 0) {
+          list.innerHTML = `<div class="faq-loading">${escapeHtml(I18N[locale].empty)}</div>`;
+          return;
+        }
+        list.innerHTML = faqs
+          .map((item) => `
+            <details class="faq-item" id="${escapeHtml(item.slug)}">
+              <summary>${escapeHtml(item.question)}</summary>
+              <div class="answer">${renderMarkdown(item.answer)}</div>
+            </details>
+          `)
+          .join('');
+
+        // Auto-expand item matching URL hash on first load
+        if (location.hash) {
+          const target = document.getElementById(location.hash.slice(1));
+          if (target && target.tagName === 'DETAILS') {
+            target.open = true;
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }
+      }
+
+      async function loadFaqs(locale) {
+        const list = document.getElementById('faq-list');
+        list.innerHTML = `<div class="faq-loading">${escapeHtml(I18N[locale].loading)}</div>`;
+
+        try {
+          const res = await fetch(`${API_BASE}/faq?locale=${encodeURIComponent(locale)}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          renderFaqs(locale, data.faqs);
+        } catch (err) {
+          console.error('[faq] Load failed:', err);
+          list.innerHTML = `<div class="faq-error">${escapeHtml(I18N[locale].error)}</div>`;
+        }
+      }
+
+      function setLocale(locale) {
+        localStorage.setItem(STORAGE_KEY, locale);
+        setActiveButton(locale);
+        setPageChrome(locale);
+        loadFaqs(locale);
+      }
+
+      // Wire up locale toggle buttons
+      document.querySelectorAll('.locale-toggle button').forEach((btn) => {
+        btn.addEventListener('click', () => setLocale(btn.dataset.locale));
+      });
+
+      // Initial load
+      setLocale(detectInitialLocale());
+    })();
+  </script>
+</body>
+</html>
