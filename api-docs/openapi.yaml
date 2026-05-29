@@ -801,6 +801,91 @@ paths:
         '502':
           description: 'Gemini Image non-2xx или ответ без inline data. **Refund issued.**'
 
+  /functions/v1/preview-prompt:
+    post:
+      tags: [AI Pipeline]
+      summary: Preview финального Stage 2 промпта (testing only)
+      description: |
+        **Dev/testing helper.** Возвращает финальный Stage 2 промпт, который `/generate` **отправил бы** в Gemini Image — но **без** списания кредита, вызова Gemini, записи в `generations` или Storage.
+
+        Реюзит ту же детерминированную `buildStage2Prompt()`, что `/generate` использует на шаге 12 → preview-промпт **байт-в-байт совпадает** с продакшн-промптом при тех же входах.
+
+        **Назначение:** сфоткать реальный продукт, прогнать `/analyze` (free), получить промпт, скопировать руками в бесплатную веб-версию Gemini Image Gen и итерировать за $0. Workaround пока Gemini Flash Image billing не включён.
+
+        **Не часть клиентского flow** — Flutter app его не вызывает. `aspect_ratio` не принимается (не часть текста промпта — в продакшне это отдельный `imageConfig.aspectRatio`).
+
+        **Verdict:** промпт строится независимо от `is_suitable.verdict` (в отличие от `/generate`, который вернул бы 422). Verdict отдаётся в ответе.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [analysis_id]
+              properties:
+                analysis_id:
+                  type: string
+                  format: uuid
+                  description: UUID анализа из `/analyze` response
+                shot_type:
+                  type: string
+                  description: 'Slug типа кадра. Optional — если NULL, используется `analysis.regeneration_guidance.recommended_shot_type`.'
+                  example: serving
+                user_text:
+                  type: string
+                  maxLength: 300
+                  description: 'Свободный текст. Проходит тот же `sanitizeUserText`, что и `/generate`.'
+                lighting:
+                  $ref: '#/components/schemas/Lighting'
+      responses:
+        '200':
+          description: Финальный Stage 2 промпт + метаданные анализа
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analysis_id:
+                    type: string
+                    format: uuid
+                  category:
+                    type: string
+                    example: food_drinks
+                  shot_type:
+                    type: string
+                    description: Resolved slug (echo или recommended)
+                    example: serving
+                  recommended_shot_type:
+                    type: string
+                  lighting:
+                    type: string
+                    description: 'Slug или строка `(shot type default)`'
+                  prompt:
+                    type: string
+                    description: Финальный промпт для копирования в Gemini веб
+                  prompt_length:
+                    type: integer
+                  is_suitable:
+                    type: boolean
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                  blockers:
+                    type: array
+                    items:
+                      type: string
+        '400':
+          description: Malformed JSON / missing analysis_id / invalid lighting / prompt build error (неизвестная category или невалидный shot_type)
+        '401':
+          description: Нет/невалидный JWT
+        '403':
+          description: '`analyses.user_id !== auth.uid()` — анализ не твой'
+        '404':
+          description: '`analysis_id` не найден'
+        '500':
+          description: Missing env vars / DB lookup failure
+
   /functions/v1/shot-types:
     get:
       tags: [AI Pipeline]
