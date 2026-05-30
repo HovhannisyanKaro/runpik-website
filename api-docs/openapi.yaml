@@ -596,6 +596,102 @@ paths:
           description: Generation не принадлежит caller'у
         '404':
           description: Generation не найдена
+        '409':
+          description: 'Нельзя удалить оригинал (v0) пока есть improvements. Body содержит `code: CANNOT_DELETE_ORIGINAL_WITH_IMPROVEMENTS`.'
+
+  /functions/v1/improve-generation:
+    post:
+      tags: [AI Pipeline]
+      summary: Улучшить генерацию (новая версия)
+      description: |
+        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. Списывает **1 кредит**, refund при сбое.
+
+        Каждая версия — обычная строка `generations`: `root_generation_id` (группа), `version_index` (0=оригинал, 1=V1…), `improvement_prompt`, `source_generation_id` (откуда улучшали). MVP **linear**: новая версия = `max(version_index)+1`.
+
+        **Gemini:** вариант A (image-to-image) — output предыдущей версии как reference + improvement-текст. Идентичность продукта подкрепляется из оригинального анализа.
+
+        **Soft-лимит:** `MAX_VERSIONS_PER_GENERATION = 5` (config, не schema). **Failed improvement** → строка версии удаляется + refund (не остаётся `failed` в списке).
+
+        **List версий:** `GET /rest/v1/generations?root_generation_id=eq.{root}&order=version_index.asc`. **Move-to-project** двигает всю группу (триггер; split запрещён).
+
+        **Mock mode:** при `RUNPIK_MOCK_GENERATION=true` копирует output источника, response содержит `mock: true`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [generation_id, improvement_prompt]
+              properties:
+                generation_id:
+                  type: string
+                  format: uuid
+                  description: Версия-источник (любая версия группы). Должна быть `done` с output'ом и принадлежать caller'у.
+                improvement_prompt:
+                  type: string
+                  minLength: 1
+                  maxLength: 300
+                  description: Текст улучшения. Проходит sanitizeUserText перед Gemini.
+                  example: сделай фон теплее
+                idempotency_key:
+                  type: string
+                  format: uuid
+                  description: Client-supplied UUID. Повторный запрос с тем же ключом → replay существующей версии (без повторного списания).
+      responses:
+        '200':
+          description: Новая версия создана (или idempotent replay)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generation_id:
+                    type: string
+                    format: uuid
+                    description: НОВАЯ версия
+                  root_generation_id:
+                    type: string
+                    format: uuid
+                  version_index:
+                    type: integer
+                    example: 1
+                  source_generation_id:
+                    type: string
+                    format: uuid
+                  improvement_prompt:
+                    type: string
+                  output_url:
+                    type: string
+                  output_path:
+                    type: string
+                  expires_in_seconds:
+                    type: integer
+                    example: 3600
+                  status:
+                    type: string
+                    example: done
+                  credits_remaining:
+                    type: integer
+                  idempotent_replay:
+                    type: boolean
+                    description: present только при idempotency replay
+                  mock:
+                    type: boolean
+                    description: present только при RUNPIK_MOCK_GENERATION=true
+        '400':
+          description: 'Пустой/слишком длинный prompt (`code: PROMPT_EMPTY` / `PROMPT_TOO_LONG`), missing generation_id, invalid JSON'
+        '401':
+          description: Нет/невалидный JWT
+        '402':
+          description: 'Недостаточно кредитов (`code: INSUFFICIENT_CREDITS`)'
+        '403':
+          description: Source generation не принадлежит caller'у
+        '404':
+          description: generation_id не найден
+        '409':
+          description: 'Лимит версий (`code: VERSION_LIMIT_REACHED`) или source не готов (`code: SOURCE_NOT_READY`)'
+        '502':
+          description: 'Gemini сбой (`code: GEMINI_FAILURE`). Строка версии удалена, кредит возвращён (refund).'
 
   /rest/v1/generations:
     patch:
