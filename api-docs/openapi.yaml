@@ -36,7 +36,7 @@ info:
 
     ## Mock mode
 
-    Сейчас backend в mock mode (`RUNPIK_MOCK_GENERATION=true`) — `/generate` возвращает копию input bytes вместо реальной AI-генерации. Это потому что Gemini Flash Image billing ещё не включён на Google Cloud. Mock mode пройдёт когда включим billing. В mock-режиме response содержит поле `"mock": true`.
+    Real AI-генерация **включена** (с 2026-05-31): Gemini Flash Image billing активен, mock выключен (`RUNPIK_MOCK_GENERATION=false`). `/generate` и `/improve-generation` делают настоящую генерацию/edit. Mock — dev-only тумблер; в prod-ответах поля `mock` нет (если видишь `"mock": true` — mock временно включён для QA).
 
     ## Подробная narrative-style документация
 
@@ -817,7 +817,7 @@ paths:
 
         **Verdict recheck:** если `analysis.is_suitable.verdict = false` — возвращает 422 **без charge'а кредита**. Defense-in-depth на случай если frontend пропустил blockers в `/analyze` response.
 
-        **Mock mode (текущий MVP state):** response содержит `"mock": true`. Output = input bytes (8 sec sleep для имитации latency). Чтобы переключиться на real Gemini — нужно enable Gemini Image billing на Google Cloud + убрать env var `RUNPIK_MOCK_GENERATION`.
+        **Real generation LIVE (с 2026-05-31):** billing включён, mock выключен — `/generate` делает настоящую AI-генерацию (10-30s). Mock — dev-only тумблер; в prod-ответах поля `mock` нет.
 
         **Output URL TTL:** 1 час. Сохрани `output_path` чтобы перегенерировать signed URL потом через Storage SDK.
       requestBody:
