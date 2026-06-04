@@ -72,6 +72,8 @@ tags:
     description: Двухстадийный AI flow — анализ фото (Stage 1, бесплатно) + генерация изображения (Stage 2, 1 кредит). Plus каталог типов кадров для UI.
   - name: Admin
     description: Backend admin endpoints — **только для пользователей с ролью superadmin**. 11 read-only routes для inspection runtime config, prompts, audit log, etc. Regular users → 403.
+  - name: Inspire
+    description: Каталог визуальных стилей (таб Inspire). Публичный `GET /styles` (опубликованные стили) + admin CRUD `/admin-styles` (роли curator/admin/superadmin).
   - name: RPCs
     description: Database-level функции — баланс кредитов, planning/cancel account deletion.
 
@@ -850,6 +852,11 @@ paths:
                   format: uuid
                   description: |
                     UUID проекта. Optional — priority резолва: explicit `project_id` > `analysis.project_id` > первый project юзера. Generation row всегда несёт `project_id` (NOT NULL).
+                style_id:
+                  type: string
+                  format: uuid
+                  description: |
+                    UUID опубликованного Inspire-стиля (см. `GET /functions/v1/styles`). Optional. Подмешивает `style_prompt` стиля как секцию **STYLE OVERLAY** в конец Stage 2 prompt. Если задан `style_id` **без** `shot_type` — style-only режим (без shot-type блока; композицию/свет задаёт стиль). Если оба — shot-type блок + overlay. Категория продукта не должна быть в `excluded_categories` стиля (иначе 400). Полностью backward-compatible — запрос без `style_id` идентичен прежнему.
       responses:
         '200':
           description: 'Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.'
@@ -858,7 +865,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/GenerateResponse'
         '400':
-          description: Malformed JSON / missing analysis_id / invalid lighting или aspect_ratio slug
+          description: 'Malformed JSON / missing analysis_id / invalid lighting или aspect_ratio slug / `style_id` не UUID / стиль не найден или не опубликован / категория продукта в `excluded_categories` стиля'
         '402':
           description: Недостаточно кредитов (`balance < 1`)
           content:
@@ -933,6 +940,10 @@ paths:
                   description: 'Свободный текст. Проходит тот же `sanitizeUserText`, что и `/generate`.'
                 lighting:
                   $ref: '#/components/schemas/Lighting'
+                style_id:
+                  type: string
+                  format: uuid
+                  description: 'UUID стиля (любой publish-статус — это testing tool). Optional. Подмешивает STYLE OVERLAY в превью-промпт так же, как в `/generate`.'
       responses:
         '200':
           description: Финальный Stage 2 промпт + метаданные анализа
@@ -1112,6 +1123,281 @@ paths:
                     type: boolean
                   total:
                     type: integer
+
+  # ============================================================
+  # INSPIRE / STYLES
+  # ============================================================
+
+  /functions/v1/styles:
+    get:
+      tags: [Inspire]
+      summary: Каталог опубликованных стилей (public, i18n)
+      description: |
+        Публичный read-only каталог **опубликованных** стилей для таба Inspire. Возвращает локализованные title/description + public CDN URL на before/after картинки.
+
+        **No auth required** — `verify_jwt = false`. Cache `public, max-age=300` (5 min edge CDN).
+
+        **`style_prompt` НИКОГДА не возвращается** (это IP). Query `WHERE is_published = true ORDER BY created_at DESC`. Пустой `[]` пока founder не добавил стилей.
+
+        **Frontend:** при выборе стиля передавай `styles[i].id` как `style_id` в `/generate`. Если `excluded_categories` содержит категорию текущего продукта — задизейбль стиль (backend тоже отвергнет, 400).
+      security: []
+      parameters:
+        - in: query
+          name: locale
+          schema:
+            type: string
+            enum: [en, ru]
+            default: en
+          description: 'Локаль для `title` + `description`. Unsupported → fallback на `en` с `fallback_used: true`.'
+      responses:
+        '200':
+          description: Массив опубликованных стилей
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=300
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  styles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StylePublic'
+                  locale:
+                    type: string
+                    enum: [en, ru]
+                  fallback_used:
+                    type: boolean
+                  total:
+                    type: integer
+        '500':
+          description: DB query failure
+
+  /functions/v1/admin-styles:
+    get:
+      tags: [Inspire]
+      summary: Список всех стилей (style managers only)
+      description: |
+        Возвращает **все** стили (любой publish-статус), `created_at DESC`, включая `style_prompt` и пути картинок.
+
+        **Auth:** роль `curator`, `admin` или `superadmin` (`requireStyleManager`). Иначе 403.
+
+        `/admin-styles` — единая функция с routing по method+sub-path (как `/admin`). Каждая мутация пишет `admin_audit_log` (`action = style.*`).
+      responses:
+        '200':
+          description: Все стили
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  styles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StyleAdmin'
+                  total:
+                    type: integer
+        '401':
+          description: Нет/невалидный JWT
+        '403':
+          description: Роль не curator/admin/superadmin
+    post:
+      tags: [Inspire]
+      summary: Создать стиль (без картинок, unpublished)
+      description: |
+        Создаёт стиль с `is_published=false`, `created_by=auth.uid()`, без картинок. Картинки грузятся отдельно (`POST /admin-styles/{id}/image`), затем publish.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, title_en, title_ru, description_en, description_ru, style_prompt]
+              properties:
+                slug:
+                  type: string
+                  pattern: '^[a-z][a-z0-9_]*$'
+                  example: apothecary_sand
+                title_en: { type: string }
+                title_ru: { type: string }
+                description_en: { type: string }
+                description_ru: { type: string }
+                style_prompt:
+                  type: string
+                  description: 'English-only style overlay prose. Backend-only, никогда не отдаётся публично.'
+                excluded_categories:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ProductCategory'
+                  description: 'Категории, с которыми стиль несовместим. Default `[]`.'
+      responses:
+        '201':
+          description: Стиль создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  style:
+                    $ref: '#/components/schemas/StyleAdmin'
+        '400':
+          description: Невалидный body / slug формат / неизвестная категория
+        '403':
+          description: Роль не style manager
+        '409':
+          description: Slug уже существует
+
+  /functions/v1/admin-styles/{id}:
+    patch:
+      tags: [Inspire]
+      summary: Обновить метаданные стиля
+      description: 'Обновляет любой subset метаданных. Нельзя менять `is_published` (отдельные publish/unpublish routes) или пути картинок (image upload route).'
+      parameters:
+        - $ref: '#/components/parameters/StyleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                slug: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+                title_en: { type: string }
+                title_ru: { type: string }
+                description_en: { type: string }
+                description_ru: { type: string }
+                style_prompt: { type: string }
+                excluded_categories:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ProductCategory'
+      responses:
+        '200':
+          description: Обновлённый стиль
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  style:
+                    $ref: '#/components/schemas/StyleAdmin'
+        '400':
+          description: Невалидный body / нет полей для update / `id` не UUID
+        '403':
+          description: Роль не style manager
+        '404':
+          description: Стиль не найден
+        '409':
+          description: Slug уже существует
+    delete:
+      tags: [Inspire]
+      summary: Удалить стиль
+      description: 'Удаляет строку (FK `generations.style_id` → SET NULL, исторические генерации переживают) + best-effort удаление blob-ов под `{id}/`.'
+      parameters:
+        - $ref: '#/components/parameters/StyleId'
+      responses:
+        '200':
+          description: Удалён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean }
+                  id: { type: string, format: uuid }
+        '403':
+          description: Роль не style manager
+        '404':
+          description: Стиль не найден
+
+  /functions/v1/admin-styles/{id}/image:
+    post:
+      tags: [Inspire]
+      summary: Загрузить before/after картинку (multipart)
+      description: |
+        Грузит картинку в `style-references/{id}/{kind}.{ext}` (старые ext-варианты этого kind удаляются), обновляет `before_image_path`/`after_image_path`.
+      parameters:
+        - $ref: '#/components/parameters/StyleId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind:
+                  type: string
+                  enum: [before, after]
+                file:
+                  type: string
+                  format: binary
+                  description: 'image/jpeg | image/png | image/webp, ≤ 5 MiB'
+      responses:
+        '200':
+          description: Обновлённый стиль
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  style:
+                    $ref: '#/components/schemas/StyleAdmin'
+        '400':
+          description: Невалидный kind / тип файла / размер > 5 MiB / не multipart
+        '403':
+          description: Роль не style manager
+        '404':
+          description: Стиль не найден
+
+  /functions/v1/admin-styles/{id}/publish:
+    post:
+      tags: [Inspire]
+      summary: Опубликовать стиль
+      description: 'Требует обе картинки (before + after). Иначе 422. БД-CHECK `styles_published_requires_images` — backstop.'
+      parameters:
+        - $ref: '#/components/parameters/StyleId'
+      responses:
+        '200':
+          description: Опубликован
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  style:
+                    $ref: '#/components/schemas/StyleAdmin'
+        '403':
+          description: Роль не style manager
+        '404':
+          description: Стиль не найден
+        '422':
+          description: 'Нет одной/обеих картинок — `{ error, missing: ["before"|"after"] }`'
+
+  /functions/v1/admin-styles/{id}/unpublish:
+    post:
+      tags: [Inspire]
+      summary: Снять стиль с публикации
+      description: 'Ставит `is_published=false`. Всегда разрешено.'
+      parameters:
+        - $ref: '#/components/parameters/StyleId'
+      responses:
+        '200':
+          description: Снят с публикации
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  style:
+                    $ref: '#/components/schemas/StyleAdmin'
+        '403':
+          description: Роль не style manager
+        '404':
+          description: Стиль не найден
 
   # ============================================================
   # ADMIN
@@ -1404,6 +1690,17 @@ components:
         Анонимный JWT проекта (публичный). Получить через Supabase Dashboard → Project Settings → API → `anon` public. Безопасно вшивать в client — защита данных через RLS, не через секретность ключа.
         В Postman: `apikey: {{anon_key}}` в env variable.
 
+  parameters:
+
+    StyleId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID стиля из таблицы `styles`
+
   schemas:
 
     # ---- Enums ----
@@ -1429,6 +1726,71 @@ components:
         - material_texture
         - overall
       description: 'Какой аспект продукта наиболее критично сохранить при регенерации.'
+
+    StylePublic:
+      type: object
+      description: 'Стиль как его видит публичный `/styles` endpoint. БЕЗ `style_prompt` (IP).'
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          example: apothecary_sand
+        title:
+          type: string
+          description: 'Локализованный заголовок (по `?locale=`)'
+        description:
+          type: string
+          description: 'Локализованное описание'
+        excluded_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductCategory'
+          description: 'Категории, с которыми стиль несовместим — фронт может задизейблить стиль для такого продукта.'
+        before_image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: 'Public CDN URL (bucket публичный, signed не нужен)'
+        after_image_url:
+          type: string
+          format: uri
+          nullable: true
+
+    StyleAdmin:
+      type: object
+      description: 'Полная строка стиля для admin (`/admin-styles`), включая `style_prompt` и пути картинок.'
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        title_en: { type: string }
+        title_ru: { type: string }
+        description_en: { type: string }
+        description_ru: { type: string }
+        style_prompt:
+          type: string
+          description: 'English-only style overlay prose. Backend-only — публичный `/styles` его вырезает.'
+        excluded_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductCategory'
+        before_image_path:
+          type: string
+          nullable: true
+          description: '`{style_id}/before.{ext}` внутри bucket `style-references`. NULL до загрузки.'
+        after_image_path:
+          type: string
+          nullable: true
+        is_published:
+          type: boolean
+          description: 'Требует обе картинки чтобы стать true (CHECK + 422).'
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        created_by:
+          type: string
+          format: uuid
+          nullable: true
 
     Lighting:
       type: string
