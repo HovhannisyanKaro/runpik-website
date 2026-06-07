@@ -857,6 +857,12 @@ paths:
                   format: uuid
                   description: |
                     UUID опубликованного Inspire-стиля (см. `GET /functions/v1/styles`). Optional. Подмешивает `style_prompt` стиля как секцию **STYLE OVERLAY** в конец Stage 2 prompt. Если задан `style_id` **без** `shot_type` — style-only режим (без shot-type блока; композицию/свет задаёт стиль). Если оба — shot-type блок + overlay. Категория продукта не должна быть в `excluded_categories` стиля (иначе 400). Полностью backward-compatible — запрос без `style_id` идентичен прежнему.
+                product_name:
+                  type: string
+                  maxLength: 60
+                  nullable: true
+                  description: |
+                    Имя товара (заголовок фото), зафиксированное на Create — обычно отредактированное `analysis.product.product_name` из `/analyze`. Optional. Санитизируется (strip control chars, trim, cap 60). Пустое/отсутствует → null (фронт показывает fallback). Пишется в `generations.product_name`. **Photo-level:** Improve-версии наследуют, переименование позже синхронится по всей группе версий (PATCH `/rest/v1/generations`). В Stage 2 НЕ уходит. (2026-06-07)
       responses:
         '200':
           description: 'Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.'
@@ -2020,7 +2026,13 @@ components:
               description: 'Свободный текст, e.g. "honey layer cake"'
             name_guess:
               type: string
-              description: 'Короткое визуальное описание'
+              description: 'Короткое визуальное описание (кормит Stage 2, НЕ заголовок)'
+            product_name:
+              allOf:
+                - $ref: '#/components/schemas/LocalizedString'
+              nullable: true
+              description: |
+                Локализованное имя-заголовок товара ({en, ru}), предлагаемое AI для UI. Может отсутствовать/быть null (AI не опознал товар). НЕ используется в Stage 2 — чистый UI-identity. Фронт берёт по локали юзера; финальное (отредактированное) имя передаётся в `/generate` как `product_name`. (2026-06-07)
         appearance:
           type: object
           properties:
