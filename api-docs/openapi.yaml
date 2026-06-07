@@ -1256,6 +1256,48 @@ paths:
         '409':
           description: Slug уже существует
 
+  /functions/v1/admin-styles/reorder:
+    post:
+      tags: [Inspire]
+      summary: Переупорядочить каталог стилей
+      description: |
+        Массив `ids` — новый порядок сверху вниз (под drag-and-drop фронт шлёт полный упорядоченный список). Бэкенд перезаписывает `sort_order = (позиция+1)*10`. Возвращает обновлённый список. Аудит `style.reorder`.
+
+        Порядок каталога везде: `sort_order ASC, created_at DESC`. Новые стили (`sort_order=0`) всплывают наверх до расстановки.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  minItems: 1
+                  description: 'Новый порядок (top→bottom). Непустой, без дублей.'
+      responses:
+        '200':
+          description: Обновлённый упорядоченный список
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  styles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StyleAdmin'
+                  total:
+                    type: integer
+        '400':
+          description: Пустой массив / не-UUID / дубли в ids
+        '403':
+          description: Роль не style manager
+
   /functions/v1/admin-styles/{id}:
     patch:
       tags: [Inspire]
@@ -1791,6 +1833,9 @@ components:
         is_published:
           type: boolean
           description: 'Требует обе картинки чтобы стать true (CHECK + 422).'
+        sort_order:
+          type: integer
+          description: 'Admin-порядок каталога. Сортировка sort_order ASC, created_at DESC. Задаётся через POST /admin-styles/reorder. (2026-06-07)'
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         created_by:
