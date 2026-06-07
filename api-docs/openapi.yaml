@@ -1143,7 +1143,7 @@ paths:
 
         **No auth required** — `verify_jwt = false`. Cache `public, max-age=300` (5 min edge CDN).
 
-        **`style_prompt` НИКОГДА не возвращается** (это IP). Query `WHERE is_published = true ORDER BY created_at DESC`. Пустой `[]` пока founder не добавил стилей.
+        **`style_prompt` НИКОГДА не возвращается** (это IP). Query `WHERE is_published = true ORDER BY sort_order ASC, created_at DESC` (порядок задаётся админом через `POST /admin-styles/reorder`). Пустой `[]` пока founder не добавил стилей.
 
         **Frontend:** при выборе стиля передавай `styles[i].id` как `style_id` в `/generate`. Если `excluded_categories` содержит категорию текущего продукта — задизейбль стиль (backend тоже отвергнет, 400).
       security: []
