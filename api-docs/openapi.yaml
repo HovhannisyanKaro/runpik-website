@@ -2256,6 +2256,22 @@ components:
               items:
                 type: string
               description: '1-2 допустимые альтернативы'
+            recommended_setting:
+              type: object
+              nullable: true
+              description: |
+                AI-арт-директорская рекомендация сцены (2026-06-08). Может отсутствовать/быть null.
+                Stage 2: используется в `on_model` (clothing); прочие shot type'ы игнорируют. Фронт может показать юзеру.
+              properties:
+                location:
+                  type: string
+                  description: 'Реальная локация под товар: "sunlit flower garden", "moody cobblestone street"'
+                time_weather:
+                  type: string
+                  description: 'Время суток / свет / погода: "warm late-spring afternoon, soft golden daylight"'
+                reasoning:
+                  type: string
+                  description: '1 короткое предложение — почему сцена подходит товару'
         is_suitable:
           type: object
           description: 'КРИТИЧЕСКОЕ поле. Frontend должен проверять `verdict` перед `/generate`.'
