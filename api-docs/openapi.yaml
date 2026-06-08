@@ -2272,6 +2272,21 @@ components:
                 reasoning:
                   type: string
                   description: '1 короткое предложение — почему сцена подходит товару'
+            recommended_props:
+              type: object
+              nullable: true
+              description: |
+                AI-рекомендация стайлинг-пропсов для flat-lay / styled кадров (2026-06-08). Может отсутствовать/быть null.
+                Stage 2: используется в `flat_lay_top_down` (clothing); прочие игнорируют. Фронт может показать юзеру.
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: string
+                  description: '1-2 пропса под товар: ["a woven sunhat", "a few seashells"]'
+                reasoning:
+                  type: string
+                  description: '1 короткое предложение — почему пропсы подходят товару'
         is_suitable:
           type: object
           description: 'КРИТИЧЕСКОЕ поле. Frontend должен проверять `verdict` перед `/generate`.'
