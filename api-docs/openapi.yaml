@@ -1831,6 +1831,77 @@ paths:
         '200':
           description: void (deletion отменён)
 
+  /functions/v1/home-blocks:
+    get:
+      tags: [Home]
+      summary: Контент-блоки Home-таба (public, i18n, ETag)
+      description: |
+        Публичная лента **модульных контент-блоков** Home-таба (тип `steps_demo` сейчас; будущие `styles_grid`/`testimonials`/…). Возвращает **активные** блоки + их **активные** items, упорядоченные.
+
+        **No auth** — `verify_jwt = false`. **i18n:** `title`/`subtitle`/`data.label` отдаются целиком как `LocalizedString {en, ru?, hy?}` — клиент локализует сам (response локоле-независим, `?locale=` не нужен).
+
+        **Кэширование:** ответ содержит `ETag`, `Last-Modified`, `Cache-Control: public, max-age=300`. Шли `If-None-Match: <etag>` — при совпадении вернётся **304** без тела. ETag может прийти weak (`W/"..."`) — шли обратно как есть. Flutter: кэшируй ETag локально, шли `If-None-Match`, при 304 используй кэш.
+
+        **`data` для `steps_demo`:** `{ step_number 1|2, label, image_url }`. Frontend группирует items по `step_number` (Step 01 / Step 02).
+      security: []
+      parameters:
+        - in: header
+          name: If-None-Match
+          required: false
+          schema:
+            type: string
+          description: 'Ранее полученный ETag. Совпадение → 304 без тела.'
+      responses:
+        '200':
+          description: Активные блоки + items
+          headers:
+            ETag:
+              schema: { type: string, example: 'W/"hb-1780917981593-1-2"' }
+            Last-Modified:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, example: public, max-age=300 }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blocks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        type: { type: string, example: steps_demo }
+                        title:
+                          type: object
+                          additionalProperties: { type: string }
+                          example: { en: How it works, ru: Как это работает }
+                        subtitle:
+                          type: object
+                          nullable: true
+                          additionalProperties: { type: string }
+                        display_order: { type: integer }
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id: { type: string, format: uuid }
+                              data:
+                                type: object
+                                description: 'type-specific. steps_demo: { step_number 1|2, label LocalizedString, image_url }'
+                              display_order: { type: integer }
+                  updated_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 'max(updated_at) по активным блокам, или null'
+        '304':
+          description: Not Modified — If-None-Match совпал (тела нет)
+        '405':
+          description: Метод ≠ GET
+
 # ============================================================
 # COMPONENTS — Reusable schemas, security
 # ============================================================
