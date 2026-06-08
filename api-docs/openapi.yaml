@@ -1836,13 +1836,13 @@ paths:
       tags: [Home]
       summary: Контент-блоки Home-таба (public, i18n, ETag)
       description: |
-        Публичная лента **модульных контент-блоков** Home-таба (тип `steps_demo` сейчас; будущие `styles_grid`/`testimonials`/…). Возвращает **активные** блоки + их **активные** items, упорядоченные.
+        Публичная лента **модульных контент-блоков** Home-таба (тип `how_it_works` сейчас; будущие `styles_grid`/`testimonials`/…). Возвращает **активные** блоки + их **активные** items, упорядоченные.
 
         **No auth** — `verify_jwt = false`. **i18n:** `title`/`subtitle`/`data.label` отдаются целиком как `LocalizedString {en, ru?, hy?}` — клиент локализует сам (response локоле-независим, `?locale=` не нужен).
 
         **Кэширование:** ответ содержит `ETag`, `Last-Modified`, `Cache-Control: public, max-age=300`. Шли `If-None-Match: <etag>` — при совпадении вернётся **304** без тела. ETag может прийти weak (`W/"..."`) — шли обратно как есть. Flutter: кэшируй ETag локально, шли `If-None-Match`, при 304 используй кэш.
 
-        **`data` для `steps_demo`:** `{ step_number 1|2, label, image_url }`. Frontend группирует items по `step_number` (Step 01 / Step 02).
+        **`data` для `how_it_works` (1 item = 1 степ):** `{ title, subtitle?, images: [{ label, image_url }] }` (≥1 картинка). Номер шага «01/02/03» = позиция item'а (`display_order`). Frontend: миниатюры `images` + большое превью выбранной с её `label`.
       security: []
       parameters:
         - in: header
@@ -1872,7 +1872,7 @@ paths:
                       type: object
                       properties:
                         id: { type: string, format: uuid }
-                        type: { type: string, example: steps_demo }
+                        type: { type: string, example: how_it_works }
                         title:
                           type: object
                           additionalProperties: { type: string }
@@ -1881,6 +1881,11 @@ paths:
                           type: object
                           nullable: true
                           additionalProperties: { type: string }
+                        footer:
+                          type: object
+                          nullable: true
+                          additionalProperties: { type: string }
+                          description: 'Общая строка под секцией (LocalizedString) или null'
                         display_order: { type: integer }
                         items:
                           type: array
@@ -1890,7 +1895,7 @@ paths:
                               id: { type: string, format: uuid }
                               data:
                                 type: object
-                                description: 'type-specific. steps_demo: { step_number 1|2, label LocalizedString, image_url }'
+                                description: 'type-specific. 1 item = 1 step (ordinal = display_order). how_it_works: { title LocalizedString, subtitle? LocalizedString, images: [{ label LocalizedString, image_url }] } (>=1 image)'
                               display_order: { type: integer }
                   updated_at:
                     type: string
