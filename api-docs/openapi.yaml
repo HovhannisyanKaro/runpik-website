@@ -1836,13 +1836,13 @@ paths:
       tags: [Home]
       summary: Контент-блоки Home-таба (public, i18n, ETag)
       description: |
-        Публичная лента **модульных контент-блоков** Home-таба (тип `how_it_works` сейчас; будущие `styles_grid`/`testimonials`/…). Возвращает **активные** блоки + их **активные** items, упорядоченные.
+        Публичная лента **модульных контент-блоков** Home-таба. `how_it_works` = модель **продукты × стадии**: блок несёт `stages` (упорядоченные типизированные колонки) + `products` (активные, у каждого `data.cells[stageId] = Media[]`). Media = `{ type:"image", image_url, label? }`. Стадии: `before` (1 медиа = левый селектор), `shot_types` (0..N).
 
         **No auth** — `verify_jwt = false`. **i18n:** `title`/`subtitle`/`data.label` отдаются целиком как `LocalizedString {en, ru?, hy?}` — клиент локализует сам (response локоле-независим, `?locale=` не нужен).
 
         **Кэширование:** ответ содержит `ETag`, `Last-Modified`, `Cache-Control: public, max-age=300`. Шли `If-None-Match: <etag>` — при совпадении вернётся **304** без тела. ETag может прийти weak (`W/"..."`) — шли обратно как есть. Flutter: кэшируй ETag локально, шли `If-None-Match`, при 304 используй кэш.
 
-        **`data` для `how_it_works` (1 item = 1 степ):** `{ title, subtitle?, images: [{ label, image_url }] }` (≥1 картинка). Номер шага «01/02/03» = позиция item'а (`display_order`). Frontend: миниатюры `images` + большое превью выбранной с её `label`.
+        **Продукт `data` (how_it_works):** `{ label, cells: { [stageId]: [{ type:"image", image_url, label? }] } }`. Frontend: клик по продукту (стадия `before`) → все колонки показывают его медиа; клик по миниатюре в колонке меняет превью только этой колонки.
       security: []
       parameters:
         - in: header
@@ -1887,15 +1887,24 @@ paths:
                           additionalProperties: { type: string }
                           description: 'Общая строка под секцией (LocalizedString) или null'
                         display_order: { type: integer }
-                        items:
+                        stages:
                           type: array
+                          description: 'Упорядоченные колонки. how_it_works: [{ id, type (before|shot_types), title LocalizedString, subtitle? }]'
+                          items:
+                            type: object
+                            properties:
+                              id: { type: string }
+                              type: { type: string, example: before }
+                              title: { type: object, additionalProperties: { type: string } }
+                              subtitle: { type: object, additionalProperties: { type: string } }
+                        products:
+                          type: array
+                          description: 'Активные продукты (= items). how_it_works data: { label LocalizedString, cells: { [stageId]: [{ type:"image", image_url, label? }] } }. before=1 медиа, shot_types=0..N.'
                           items:
                             type: object
                             properties:
                               id: { type: string, format: uuid }
-                              data:
-                                type: object
-                                description: 'type-specific. 1 item = 1 step (ordinal = display_order). how_it_works: { title LocalizedString, subtitle? LocalizedString, images: [{ label LocalizedString, image_url }] } (>=1 image)'
+                              data: { type: object }
                               display_order: { type: integer }
                   updated_at:
                     type: string
@@ -2012,18 +2021,71 @@ paths:
         '200': { description: '{ deleted: true, id }' }
         '404': { description: Блок не найден }
 
-  /functions/v1/admin-home-blocks/{id}/items:
+  /functions/v1/admin-home-blocks/{id}/stages:
     parameters:
-      - in: path
-        name: id
-        required: true
-        schema: { type: string, format: uuid }
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
     post:
       tags: [Home]
-      summary: Создать item (шаг)
-      description: |
-        **1 item = 1 шаг.** Для `how_it_works` `data`: `{ title, subtitle?, images: [{ label, image_url }] }` (≥1 картинка).
-        Номер «01/02/03» — это позиция (`display_order`), отдельного поля нет.
+      summary: Добавить стадию (колонку)
+      description: 'type ∈ before|shot_types (реестр в коде). before = 1 медиа на продукт, shot_types = 0..N.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, title]
+              properties:
+                type: { type: string, example: shot_types }
+                title: { type: object, additionalProperties: { type: string } }
+                subtitle: { type: object, additionalProperties: { type: string } }
+      responses:
+        '201': { description: '{ stage, stages }' }
+        '400': { description: Невалидный type/title }
+
+  /functions/v1/admin-home-blocks/{id}/stages/reorder:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Home]
+      summary: Переупорядочить стадии
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [ids], properties: { ids: { type: array, items: { type: string } } } }
+      responses:
+        '200': { description: '{ ok, stages }' }
+
+  /functions/v1/admin-home-blocks/{id}/stages/{sid}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: sid, required: true, schema: { type: string } }
+    patch:
+      tags: [Home]
+      summary: Обновить стадию (title/subtitle)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { title: { type: object }, subtitle: { type: object, nullable: true } } }
+      responses:
+        '200': { description: '{ stage, stages }' }
+        '404': { description: Стадия не найдена }
+    delete:
+      tags: [Home]
+      summary: Удалить стадию (+ её медиа у всех продуктов + блобы)
+      responses:
+        '200': { description: '{ deleted: true, id, stages }' }
+        '404': { description: Стадия не найдена }
+
+  /functions/v1/admin-home-blocks/{id}/products:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Home]
+      summary: Создать продукт
+      description: 'data = { label LocalizedString, cells?: { [stageId]: [{ type:"image", image_url, label? }] } }. Число медиа в ячейке ≤ лимита типа стадии.'
       requestBody:
         required: true
         content:
@@ -2032,50 +2094,34 @@ paths:
               type: object
               required: [data]
               properties:
-                data:
-                  type: object
-                  description: 'how_it_works: { title LocalizedString, subtitle? LocalizedString, images: [{ label LocalizedString, image_url }] }'
+                data: { type: object, description: '{ label, cells: { [stageId]: Media[] } }' }
                 display_order: { type: integer }
                 is_active: { type: boolean }
       responses:
-        '201': { description: '{ item }' }
-        '400': { description: Невалидный data }
-        '404': { description: Блок не найден }
+        '201': { description: '{ product }' }
+        '400': { description: Невалидный data/cells }
 
-  /functions/v1/admin-home-blocks/{id}/items/reorder:
+  /functions/v1/admin-home-blocks/{id}/products/reorder:
     parameters:
-      - in: path
-        name: id
-        required: true
-        schema: { type: string, format: uuid }
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
     post:
       tags: [Home]
-      summary: Переупорядочить items (шаги) в блоке
+      summary: Переупорядочить продукты
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [ids]
-              properties:
-                ids: { type: array, items: { type: string, format: uuid } }
+            schema: { type: object, required: [ids], properties: { ids: { type: array, items: { type: string, format: uuid } } } }
       responses:
         '200': { description: '{ ok, reordered }' }
 
-  /functions/v1/admin-home-blocks/{id}/items/{itemId}:
+  /functions/v1/admin-home-blocks/{id}/products/{pid}:
     parameters:
-      - in: path
-        name: id
-        required: true
-        schema: { type: string, format: uuid }
-      - in: path
-        name: itemId
-        required: true
-        schema: { type: string, format: uuid }
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: pid, required: true, schema: { type: string, format: uuid } }
     patch:
       tags: [Home]
-      summary: Обновить item (шаг)
+      summary: Обновить продукт (label/cells/is_active/display_order)
       requestBody:
         required: true
         content:
@@ -2083,18 +2129,20 @@ paths:
             schema:
               type: object
               properties:
-                data: { type: object, description: 'how_it_works: { title, subtitle?, images:[{label,image_url}] }' }
+                data: { type: object, description: '{ label?, cells? }' }
+                label: { type: object }
+                cells: { type: object }
                 display_order: { type: integer }
                 is_active: { type: boolean }
       responses:
-        '200': { description: '{ item }' }
-        '404': { description: Item не найден }
+        '200': { description: '{ product }' }
+        '404': { description: Продукт не найден }
     delete:
       tags: [Home]
-      summary: Удалить item (+ cleanup блобов всех его картинок)
+      summary: Удалить продукт (+ его блобы)
       responses:
         '200': { description: '{ deleted: true, id }' }
-        '404': { description: Item не найден }
+        '404': { description: Продукт не найден }
 
 # ============================================================
 # COMPONENTS — Reusable schemas, security
