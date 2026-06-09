@@ -1907,6 +1907,195 @@ paths:
         '405':
           description: Метод ≠ GET
 
+  /functions/v1/admin-home-blocks:
+    get:
+      tags: [Home]
+      summary: Список всех Home-блоков + items (admin/superadmin)
+      description: |
+        Все блоки (любой `is_active`) вместе с их items. Роль **admin | superadmin** (`requireHomeBlockManager`).
+        Типы блоков валидируются в коде (сейчас `how_it_works`); новый тип = только код.
+      responses:
+        '200':
+          description: '{ blocks: [...with items...], total }'
+        '401': { description: Нет JWT }
+        '403': { description: Не admin/superadmin }
+    post:
+      tags: [Home]
+      summary: Создать блок
+      description: 'Создать Home-блок. Для `how_it_works` блок несёт title/subtitle/footer всей секции.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, title]
+              properties:
+                type: { type: string, example: how_it_works }
+                title: { type: object, additionalProperties: { type: string }, description: 'LocalizedString, en обязателен' }
+                subtitle: { type: object, nullable: true, additionalProperties: { type: string } }
+                footer: { type: object, nullable: true, additionalProperties: { type: string }, description: 'Строка под секцией' }
+                display_order: { type: integer }
+                is_active: { type: boolean }
+      responses:
+        '201': { description: '{ block }' }
+        '400': { description: Невалидное тело/type }
+        '403': { description: Не admin }
+
+  /functions/v1/admin-home-blocks/reorder:
+    post:
+      tags: [Home]
+      summary: Переупорядочить блоки
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: { type: array, items: { type: string, format: uuid }, description: 'новый порядок сверху-вниз; display_order=(pos+1)*10' }
+      responses:
+        '200': { description: '{ ok, reordered }' }
+        '400': { description: Невалидные ids }
+
+  /functions/v1/admin-home-blocks/upload-image:
+    post:
+      tags: [Home]
+      summary: Загрузить картинку (multipart) → { url, path }
+      description: |
+        Загружает файл в bucket `home-blocks` под `{block_type}/{uuid}.{ext}` и возвращает public `url` + `path`.
+        Admin UI затем кладёт `url` в `data.images[i].image_url` при создании/обновлении item.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: 'jpeg/png/webp, ≤5 MiB' }
+                block_type: { type: string, description: 'папка (по умолчанию how_it_works)' }
+      responses:
+        '201': { description: '{ url, path }' }
+        '400': { description: Нет файла / неверный тип / >5 MiB }
+
+  /functions/v1/admin-home-blocks/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Home]
+      summary: Обновить блок
+      description: 'Любое подмножество. `subtitle`/`footer` = `null` очищает.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: object, additionalProperties: { type: string } }
+                subtitle: { type: object, nullable: true, additionalProperties: { type: string } }
+                footer: { type: object, nullable: true, additionalProperties: { type: string } }
+                display_order: { type: integer }
+                is_active: { type: boolean }
+      responses:
+        '200': { description: '{ block }' }
+        '404': { description: Блок не найден }
+    delete:
+      tags: [Home]
+      summary: Удалить блок (cascade items + cleanup блобов)
+      responses:
+        '200': { description: '{ deleted: true, id }' }
+        '404': { description: Блок не найден }
+
+  /functions/v1/admin-home-blocks/{id}/items:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Home]
+      summary: Создать item (шаг)
+      description: |
+        **1 item = 1 шаг.** Для `how_it_works` `data`: `{ title, subtitle?, images: [{ label, image_url }] }` (≥1 картинка).
+        Номер «01/02/03» — это позиция (`display_order`), отдельного поля нет.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  description: 'how_it_works: { title LocalizedString, subtitle? LocalizedString, images: [{ label LocalizedString, image_url }] }'
+                display_order: { type: integer }
+                is_active: { type: boolean }
+      responses:
+        '201': { description: '{ item }' }
+        '400': { description: Невалидный data }
+        '404': { description: Блок не найден }
+
+  /functions/v1/admin-home-blocks/{id}/items/reorder:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Home]
+      summary: Переупорядочить items (шаги) в блоке
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: { type: array, items: { type: string, format: uuid } }
+      responses:
+        '200': { description: '{ ok, reordered }' }
+
+  /functions/v1/admin-home-blocks/{id}/items/{itemId}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+      - in: path
+        name: itemId
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Home]
+      summary: Обновить item (шаг)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { type: object, description: 'how_it_works: { title, subtitle?, images:[{label,image_url}] }' }
+                display_order: { type: integer }
+                is_active: { type: boolean }
+      responses:
+        '200': { description: '{ item }' }
+        '404': { description: Item не найден }
+    delete:
+      tags: [Home]
+      summary: Удалить item (+ cleanup блобов всех его картинок)
+      responses:
+        '200': { description: '{ deleted: true, id }' }
+        '404': { description: Item не найден }
+
 # ============================================================
 # COMPONENTS — Reusable schemas, security
 # ============================================================
