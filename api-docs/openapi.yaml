@@ -74,6 +74,8 @@ tags:
     description: Backend admin endpoints — **только для пользователей с ролью superadmin**. 11 read-only routes для inspection runtime config, prompts, audit log, etc. Regular users → 403.
   - name: Inspire
     description: Каталог визуальных стилей (таб Inspire). Публичный `GET /styles` (опубликованные стили) + admin CRUD `/admin-styles` (роли curator/admin/superadmin).
+  - name: Landing
+    description: Контент-блоки маркетингового лендинга runpik.com (не Home-таб приложения). Публичный `GET /landing-blocks` (активные секции + публичные карточки) + admin CRUD `/admin-landing-blocks` (роли admin/superadmin). Первый тип — hero (карточки before/after).
   - name: RPCs
     description: Database-level функции — баланс кредитов, planning/cancel account deletion.
 
@@ -2143,6 +2145,227 @@ paths:
       responses:
         '200': { description: '{ deleted: true, id }' }
         '404': { description: Продукт не найден }
+
+  /functions/v1/landing-blocks:
+    get:
+      tags: [Landing]
+      summary: Контент-блоки лендинга (public, i18n, ETag)
+      description: |
+        Публичная лента модульных контент-блоков **маркетингового лендинга runpik.com** — отдельная фича от Home-таба приложения (своя таблица/функции/bucket). Первый тип — `hero`: блок несёт `title`/`subtitle` (шапка секции, одна на фичу) + `items` (карточки before/after, только `is_public=true`). Карточка `data = { before, after }`, где before/after = `{ type:"image", image_url, label }` (у каждой картинки своя подпись).
+
+        **No auth** — `verify_jwt = false`. **i18n:** строки отдаются целиком как `LocalizedString {en, ru?, hy?}` — клиент локализует (response локоле-независим).
+
+        **Фильтр:** без параметров → все активные секции (вся страница одним запросом, по `display_order`). `?type=hero` → только эта секция (свой ETag).
+
+        **Кэширование:** `ETag`, `Last-Modified`, `Cache-Control: public, max-age=300`. Шли `If-None-Match` — при совпадении вернётся **304** без тела. ETag может прийти weak (`W/"..."`).
+      security: []
+      parameters:
+        - in: query
+          name: type
+          required: false
+          schema: { type: string, example: hero }
+          description: 'Опционально. Сузить до одного типа блока. Без него — все активные секции.'
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: 'Ранее полученный ETag. Совпадение → 304 без тела.'
+      responses:
+        '200':
+          description: Активные блоки + публичные items
+          headers:
+            ETag:
+              schema: { type: string, example: 'W/"lb-all-1781199867930-1-0"' }
+            Last-Modified:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, example: 'public, max-age=300' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blocks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        type: { type: string, example: hero }
+                        title:
+                          type: object
+                          additionalProperties: { type: string }
+                          example: { en: See the difference, ru: Почувствуйте разницу }
+                        subtitle:
+                          type: object
+                          nullable: true
+                          additionalProperties: { type: string }
+                        footer:
+                          type: object
+                          nullable: true
+                          additionalProperties: { type: string }
+                        items:
+                          type: array
+                          description: 'Только is_public=true, по display_order. hero data: { before, after }, before/after = { type image, image_url, label LocalizedString }.'
+                          items:
+                            type: object
+                            properties:
+                              id: { type: string, format: uuid }
+                              data: { type: object }
+                              display_order: { type: integer }
+                  updated_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+        '304':
+          description: Not Modified — If-None-Match совпал (тела нет)
+        '405':
+          description: Метод ≠ GET
+
+  /functions/v1/admin-landing-blocks:
+    get:
+      tags: [Landing]
+      summary: Список всех лендинг-блоков + items (admin/superadmin)
+      description: |
+        Все блоки (любой `is_active`) + их items, включая черновики (`is_public=false`) и image-пути. Роль **admin | superadmin** (`requireLandingBlockManager`). Форма `data` валидируется в коде.
+      responses:
+        '200': { description: '{ blocks с items, total }' }
+        '401': { description: Нет JWT }
+        '403': { description: Не admin/superadmin }
+
+  /functions/v1/admin-landing-blocks/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Landing]
+      summary: Обновить блок (title/subtitle/footer/is_active/display_order)
+      description: '`is_active` — вкл/выкл всей фичи hero. `subtitle`/`footer` = null очищает.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: object, additionalProperties: { type: string }, description: 'LocalizedString, en обязателен' }
+                subtitle: { type: object, nullable: true, additionalProperties: { type: string } }
+                footer: { type: object, nullable: true, additionalProperties: { type: string } }
+                is_active: { type: boolean }
+                display_order: { type: integer }
+      responses:
+        '200': { description: '{ block }' }
+        '400': { description: Невалидное тело }
+        '403': { description: Не admin }
+        '404': { description: Блок не найден }
+
+  /functions/v1/admin-landing-blocks/{id}/items:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Landing]
+      summary: Создать карточку (черновик is_public=false)
+      description: 'Создаёт карточку hero. Картинки добавляются отдельно через image-роут. Карточка всегда стартует черновиком.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                before: { type: object, description: 'before-сторона, опц. { label }' }
+                after: { type: object, description: 'after-сторона, опц. { label }' }
+                display_order: { type: integer }
+      responses:
+        '201': { description: '{ item }' }
+        '400': { description: Невалидное тело }
+        '404': { description: Блок не найден }
+
+  /functions/v1/admin-landing-blocks/{id}/items/reorder:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Landing]
+      summary: Переупорядочить карточки
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: { type: array, items: { type: string, format: uuid }, description: 'новый порядок; display_order=(pos+1)*10' }
+      responses:
+        '200': { description: '{ ok, reordered }' }
+        '400': { description: Невалидные ids }
+
+  /functions/v1/admin-landing-blocks/{id}/items/{iid}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: iid, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Landing]
+      summary: Обновить карточку (before.label/after.label/is_public/display_order)
+      description: '`image_url` тут не меняется (только image-роут). `is_public=true` гейтится — обе картинки + обе en-подписи, иначе 422.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                before: { type: object, description: 'опц. { label }' }
+                after: { type: object, description: 'опц. { label }' }
+                is_public: { type: boolean }
+                display_order: { type: integer }
+      responses:
+        '200': { description: '{ item }' }
+        '400': { description: Невалидное тело }
+        '404': { description: Карточка не найдена }
+        '422': { description: 'Publish неполной карточки — { error, missing }' }
+    delete:
+      tags: [Landing]
+      summary: Удалить карточку (+ блобы)
+      responses:
+        '200': { description: '{ deleted: true, id }' }
+        '404': { description: Карточка не найдена }
+
+  /functions/v1/admin-landing-blocks/{id}/items/{iid}/image:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: iid, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Landing]
+      summary: Загрузить картинку before|after (multipart)
+      description: 'Грузит файл в bucket `landing-blocks` под `hero/{item_id}-{kind}.{ext}` и проставляет `image_url` в карточке. Устаревшие ext-варианты того же kind подчищаются.'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind: { type: string, enum: [before, after] }
+                file: { type: string, format: binary, description: 'jpeg/png/webp, ≤5 MiB' }
+      responses:
+        '201': { description: '{ item, kind, url }' }
+        '400': { description: Нет файла / неверный kind / тип / >5 MiB }
+        '404': { description: Карточка не найдена }
+    delete:
+      tags: [Landing]
+      summary: Удалить картинку before|after
+      description: 'Удаляет картинку и блоб. У опубликованной карточки запрещено (409) — сначала unpublish.'
+      parameters:
+        - in: query
+          name: kind
+          required: true
+          schema: { type: string, enum: [before, after] }
+      responses:
+        '200': { description: '{ item, kind, removed }' }
+        '400': { description: Неверный kind }
+        '404': { description: Карточка не найдена }
+        '409': { description: Карточка опубликована — сначала unpublish }
 
 # ============================================================
 # COMPONENTS — Reusable schemas, security
