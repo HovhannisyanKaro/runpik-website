@@ -4,22 +4,155 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Runpik — AI Product Photography</title>
-  <meta name="description" content="Turn a phone photo of your product into a studio-quality photograph in seconds.">
-  <link rel="stylesheet" href="style.css">
+  <meta name="description" content="Turn a phone photo of your product into a studio-quality photograph in seconds. No studio, no photographer.">
+  <link rel="icon" type="image/png" sizes="256x256" href="assets/favicon.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="landing.css">
 </head>
 <body>
-  <header>
-    <a href="index.html" class="logo">Runpik</a>
-  </header>
 
-  <main>
-    <section class="hero">
-      <h1>AI product photography</h1>
-      <p class="lead">Turn a phone photo of your product into a studio-quality photograph in seconds.</p>
-      <p class="coming-soon">Mobile app coming soon to iOS and Android</p>
-    </section>
+  <!-- ===================== NAV ===================== -->
+  <nav class="site-nav">
+    <a class="brand" href="index.html">
+      <img class="mark" src="assets/runpik-logo.png" alt="Runpik">
+      <span class="word">Runpik</span>
+    </a>
+
+    <div class="nav-links">
+      <button class="nlink" id="product-trigger" aria-haspopup="true" aria-expanded="false">
+        <span data-i18n="nav.product">Product</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <a class="nlink" href="#pricing"><span data-i18n="nav.pricing">Pricing</span></a>
+      <a class="nlink" href="#blog"><span data-i18n="nav.blog">Blog</span></a>
+    </div>
+
+    <div class="nav-actions">
+      <div class="lang-wrap">
+        <button class="lang" id="lang-trigger" aria-haspopup="true" aria-expanded="false">
+          <span class="lang-label">EN</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="lang-menu" id="lang-menu" role="menu">
+          <button class="lang-opt" data-lang="en" role="menuitem">English</button>
+          <button class="lang-opt" data-lang="ru" role="menuitem">Русский</button>
+          <button class="lang-opt" data-lang="hy" role="menuitem">Հայերեն</button>
+        </div>
+      </div>
+      <a class="btn-grad" href="#start" data-i18n="nav.try">Try for free</a>
+    </div>
+
+    <button class="hamb" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
+    </button>
+  </nav>
+
+  <!-- ===================== PRODUCT DROPDOWN ===================== -->
+  <div class="dropdown" id="product-menu">
+    <div class="dd-label" data-i18n="dd.label">Product</div>
+    <div class="dd-grid">
+      <a class="dd-item" href="#how-it-works">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h11"/><path d="M10 12h11"/><path d="M10 18h11"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg></span>
+        <span class="tx"><span class="t" data-i18n="dd.how.t">How it works</span><span class="d" data-i18n="dd.how.d">Upload → concept → result</span></span>
+      </a>
+      <a class="dd-item" href="#inspire">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c.4 3.1 1.4 5.4 3.1 7C16.8 11.6 19 12 22 12c-3 0-5.2.4-6.9 2-1.7 1.7-2.7 4-3.1 7-.4-3-1.4-5.3-3.1-7C6.2 12.4 4 12 1 12c3 0 5.2-.4 6.9-2C9.6 8.4 10.6 6.1 12 3Z"/></svg></span>
+        <span class="tx"><span class="t" data-i18n="dd.inspire.t">Inspire styles</span><span class="d" data-i18n="dd.inspire.d">Curated visual styles</span></span>
+      </a>
+      <a class="dd-item" href="#infographics">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></span>
+        <span class="tx"><span class="t" data-i18n="dd.info.t">AI infographics</span><span class="d" data-i18n="dd.info.d">Add badges &amp; text in 1 click</span></span>
+      </a>
+      <a class="dd-item" href="#examples">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+        <span class="tx"><span class="t" data-i18n="dd.examples.t">Examples</span><span class="d" data-i18n="dd.examples.d">Browse by product category</span></span>
+      </a>
+    </div>
+    <div class="dd-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+      <span data-i18n="dd.note">Jumps to the section on this page</span>
+    </div>
+  </div>
+
+  <!-- ===================== HERO ===================== -->
+  <main class="hero">
+    <div class="hero-inner">
+      <div class="hero-msg">
+        <div class="eyebrow" data-i18n="hero.eyebrow">AI product photography</div>
+        <h1 class="headline">
+          <span class="line" data-i18n="hero.h1">Professional product photos.</span>
+          <span class="line soft" data-i18n="hero.h2">No studio. No photographer.</span>
+        </h1>
+        <p class="hero-sub" data-i18n="hero.sub">Turn an ordinary phone photo into studio-quality shots for your store — in minutes, not days.</p>
+        <div class="cta-row">
+          <a class="btn-grad lg" href="#start" data-i18n="hero.try">Try for free</a>
+          <a class="btn-ghost" href="#how-it-works" data-i18n="hero.how">See how it works</a>
+        </div>
+        <div class="reassure" data-i18n="hero.reassure">6 free credits on signup · No credit card required</div>
+      </div>
+
+      <div class="hero-visual">
+        <div class="ba-pair">
+          <div class="ba-col">
+            <div class="bacard before">
+              <div class="scene"></div>
+              <div class="door"><div class="panel"></div><div class="knob"></div></div>
+              <div class="dress"><span class="hook"></span><span class="hanger"></span><span class="body"></span><span class="sheen"></span></div>
+              <div class="vignette"></div>
+              <span class="chip" data-i18n="ba.before">BEFORE</span>
+            </div>
+            <div class="ba-cap muted" data-i18n="ba.beforecap">Your phone photo</div>
+          </div>
+
+          <div class="ba-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"/><path d="m12 5 7 7-7 7"/></svg></div>
+
+          <div class="ba-col">
+            <div class="bacard after">
+              <div class="scene"></div>
+              <div class="floor"></div>
+              <div class="contact"></div>
+              <div class="dress"><span class="body"></span><span class="sheen"></span></div>
+              <div class="keylight"></div>
+              <div class="vignette"></div>
+              <span class="chip after-chip" data-i18n="ba.after">AFTER</span>
+            </div>
+            <div class="ba-cap prime" data-i18n="ba.aftercap">Studio result in minutes</div>
+          </div>
+        </div>
+
+        <div class="concepts">
+          <div class="thumbs">
+            <div class="thumb t1"><span class="td"></span></div>
+            <div class="thumb t2"><span class="td"></span></div>
+            <div class="thumb t3"><span class="td"></span></div>
+          </div>
+          <span class="more" data-i18n="concepts.more">+ more concepts — catalog, on-model, flat-lay</span>
+        </div>
+      </div>
+    </div>
   </main>
 
+  <!-- ===================== HOW IT WORKS (GET /home-blocks) ===================== -->
+  <section class="hiw" id="how-it-works" style="display:none">
+    <div class="hiw-inner">
+      <div class="sec-head">
+        <div class="kicker" data-hiw="kicker"></div>
+        <h2 class="headline2" data-hiw="headline"></h2>
+      </div>
+      <div class="tabs" data-hiw="tabs"></div>
+      <div class="tabs-note" data-hiw="note"></div>
+      <div class="conveyor" data-hiw="conveyor"></div>
+      <div class="hiw-footer"><p data-hiw="footer"></p></div>
+    </div>
+  </section>
+
+  <!-- ===================== TICKER (animated line) — below How it works ===================== -->
+  <div class="ticker"><div class="tk-track" data-ticker></div></div>
+
+  <!-- ===================== FOOTER (content unchanged) ===================== -->
   <footer>
     <nav>
       <a href="about.html">About</a>
@@ -30,5 +163,371 @@
     </nav>
     <p class="copyright">&copy; 2026 Runpik. All rights reserved.</p>
   </footer>
+
+  <script>
+    // Shared current locale + a hook so the API-driven How-it-works section
+    // re-localizes when the language switches.
+    var curLang = 'en';
+    var hiwRender = null;
+
+    // ===== i18n dictionary — locales: en | ru | hy (per backend profiles.locale) =====
+    var I18N = {
+      en: {
+        'nav.product': 'Product', 'nav.pricing': 'Pricing', 'nav.blog': 'Blog', 'nav.try': 'Try for free',
+        'dd.label': 'Product',
+        'dd.how.t': 'How it works', 'dd.how.d': 'Upload → concept → result',
+        'dd.inspire.t': 'Inspire styles', 'dd.inspire.d': 'Curated visual styles',
+        'dd.info.t': 'AI infographics', 'dd.info.d': 'Add badges & text in 1 click',
+        'dd.examples.t': 'Examples', 'dd.examples.d': 'Browse by product category',
+        'dd.note': 'Jumps to the section on this page',
+        'hero.eyebrow': 'AI product photography',
+        'hero.h1': 'Professional product photos.',
+        'hero.h2': 'No studio. No photographer.',
+        'hero.sub': 'Turn an ordinary phone photo into studio-quality shots for your store — in minutes, not days.',
+        'hero.try': 'Try for free', 'hero.how': 'See how it works',
+        'hero.reassure': '6 free credits on signup · No credit card required',
+        'ba.before': 'BEFORE', 'ba.after': 'AFTER',
+        'ba.beforecap': 'Your phone photo', 'ba.aftercap': 'Studio result in minutes',
+        'concepts.more': '+ more concepts — catalog, on-model, flat-lay'
+      },
+      ru: {
+        'nav.product': 'Продукт', 'nav.pricing': 'Цены', 'nav.blog': 'Блог', 'nav.try': 'Попробовать бесплатно',
+        'dd.label': 'Продукт',
+        'dd.how.t': 'Как это работает', 'dd.how.d': 'Загрузка → концепт → результат',
+        'dd.inspire.t': 'Стили Inspire', 'dd.inspire.d': 'Подобранные визуальные стили',
+        'dd.info.t': 'AI-инфографика', 'dd.info.d': 'Бейджи и текст в 1 клик',
+        'dd.examples.t': 'Примеры', 'dd.examples.d': 'По категориям товаров',
+        'dd.note': 'Переход к секции на этой странице',
+        'hero.eyebrow': 'AI-фотосъёмка товаров',
+        'hero.h1': 'Профессиональные фото товаров.',
+        'hero.h2': 'Без студии. Без фотографа.',
+        'hero.sub': 'Превратите обычное фото с телефона в студийные кадры для вашего магазина — за минуты, а не дни.',
+        'hero.try': 'Попробовать бесплатно', 'hero.how': 'Как это работает',
+        'hero.reassure': '6 бесплатных кредитов при регистрации · Без карты',
+        'ba.before': 'ДО', 'ba.after': 'ПОСЛЕ',
+        'ba.beforecap': 'Ваше фото с телефона', 'ba.aftercap': 'Студийный результат за минуты',
+        'concepts.more': '+ ещё концепты — каталог, на модели, flat-lay'
+      },
+      hy: {
+        'nav.product': 'Ապրանք', 'nav.pricing': 'Գներ', 'nav.blog': 'Բլոգ', 'nav.try': 'Փորձել անվճար',
+        'dd.label': 'Ապրանք',
+        'dd.how.t': 'Ինչպես է աշխատում', 'dd.how.d': 'Վերբեռնում → կոնցեպտ → արդյունք',
+        'dd.inspire.t': 'Inspire ոճեր', 'dd.inspire.d': 'Ընտրված վիզուալ ոճեր',
+        'dd.info.t': 'AI ինֆոգրաֆիկա', 'dd.info.d': 'Կպիչներ և տեքստ՝ 1 կտտոցով',
+        'dd.examples.t': 'Օրինակներ', 'dd.examples.d': 'Ըստ ապրանքի կատեգորիայի',
+        'dd.note': 'Տանում է էջի համապատասխան բաժին',
+        'hero.eyebrow': 'AI ապրանքների լուսանկարում',
+        'hero.h1': 'Պրոֆեսիոնալ ապրանքի լուսանկարներ։',
+        'hero.h2': 'Առանց ստուդիայի։ Առանց լուսանկարչի։',
+        'hero.sub': 'Վերածեք հեռախոսով արված սովորական լուսանկարը ստուդիական որակի կադրերի՝ ձեր խանութի համար, րոպեների, ոչ թե օրերի ընթացքում։',
+        'hero.try': 'Փորձել անվճար', 'hero.how': 'Տեսնել՝ ինչպես է աշխատում',
+        'hero.reassure': '6 անվճար կրեդիտ գրանցման ժամանակ · Քարտ պետք չէ',
+        'ba.before': 'ՄԻՆՉ', 'ba.after': 'ՀԵՏՈ',
+        'ba.beforecap': 'Ձեր հեռախոսի լուսանկարը', 'ba.aftercap': 'Ստուդիական արդյունք՝ րոպեների ընթացքում',
+        'concepts.more': '+ այլ կոնցեպտներ՝ կատալոգ, մոդելի վրա, flat-lay'
+      }
+    };
+    var TICKERS = {
+      en: ['AI generation', 'No studio needed', 'No equipment', 'Just upload', 'Marketplace-ready', 'Results in minutes'],
+      ru: ['AI-генерация', 'Без студии', 'Без оборудования', 'Просто загрузите', 'Готово для маркетплейса', 'Результат за минуты'],
+      hy: ['AI գեներացիա', 'Ստուդիա պետք չէ', 'Սարքավորում պետք չէ', 'Պարզապես վերբեռնեք', 'Մարկետփլեյսի համար', 'Արդյունք րոպեների ընթացքում']
+    };
+
+    function buildTicker(lang) {
+      var phrases = TICKERS[lang] || TICKERS.en;
+      function seg() { return phrases.map(function (p) { return '<span class="tk-item"><span class="dot"></span>' + p + '</span>'; }).join(''); }
+      document.querySelectorAll('[data-ticker]').forEach(function (t) { t.innerHTML = seg() + seg() + seg() + seg(); });
+    }
+
+    function setLang(lang) {
+      if (!I18N[lang]) lang = 'en';
+      curLang = lang;
+      document.querySelectorAll('[data-i18n]').forEach(function (el) {
+        var k = el.getAttribute('data-i18n');
+        var v = (I18N[lang][k] != null) ? I18N[lang][k] : I18N.en[k];
+        if (v != null) el.textContent = v;
+      });
+      buildTicker(lang);
+      document.documentElement.lang = lang;
+      var label = document.querySelector('.lang-label');
+      if (label) label.textContent = lang.toUpperCase();
+      document.querySelectorAll('.lang-opt').forEach(function (o) {
+        o.classList.toggle('active', o.getAttribute('data-lang') === lang);
+      });
+      try { localStorage.setItem('runpik_lang', lang); } catch (e) {}
+      if (hiwRender) hiwRender();
+    }
+
+    // ===== Product dropdown =====
+    (function () {
+      var trigger = document.getElementById('product-trigger');
+      var menu = document.getElementById('product-menu');
+      if (trigger && menu) {
+        function close() { menu.classList.remove('open'); trigger.classList.remove('active'); trigger.setAttribute('aria-expanded', 'false'); }
+        function open() { menu.classList.add('open'); trigger.classList.add('active'); trigger.setAttribute('aria-expanded', 'true'); }
+        trigger.addEventListener('click', function (e) { e.stopPropagation(); menu.classList.contains('open') ? close() : open(); });
+        document.addEventListener('click', function (e) { if (menu.classList.contains('open') && !menu.contains(e.target)) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+      }
+    })();
+
+    // ===== Language dropdown =====
+    (function () {
+      var trigger = document.getElementById('lang-trigger');
+      var menu = document.getElementById('lang-menu');
+      if (trigger && menu) {
+        function close() { menu.classList.remove('open'); trigger.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); }
+        function open() { menu.classList.add('open'); trigger.classList.add('open'); trigger.setAttribute('aria-expanded', 'true'); }
+        trigger.addEventListener('click', function (e) { e.stopPropagation(); menu.classList.contains('open') ? close() : open(); });
+        document.addEventListener('click', function (e) { if (menu.classList.contains('open') && !menu.contains(e.target)) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+        menu.querySelectorAll('.lang-opt').forEach(function (opt) {
+          opt.addEventListener('click', function () { setLang(opt.getAttribute('data-lang')); close(); });
+        });
+      }
+    })();
+
+    // ===== Init =====
+    var saved = 'en';
+    try { saved = localStorage.getItem('runpik_lang') || 'en'; } catch (e) {}
+    setLang(saved);
+
+    // ===== Hero before/after from API (GET /landing-blocks?type=hero) =====
+    // Images only (labels / hero title-subtitle intentionally ignored).
+    // Caching: localStorage for instant paint + the browser HTTP cache
+    // (server sends ETag + Cache-Control: max-age=300 → no request for 5 min,
+    // then a cheap 304 revalidation). Falls back to the CSS placeholder when
+    // there are no published cards or the API is unreachable.
+    (function () {
+      var HERO_API = 'https://wnbtsqfdlbjwtetppdng.functions.supabase.co/landing-blocks?type=hero';
+      var HERO_CACHE = 'runpik_hero_v1';
+
+      function setImg(side, url) {
+        var card = document.querySelector('.bacard.' + side);
+        if (!card || !url) return;
+        var img = card.querySelector('.ba-img');
+        if (!img) {
+          img = document.createElement('img');
+          img.className = 'ba-img';
+          img.alt = '';
+          img.addEventListener('load', function () { img.classList.add('loaded'); });
+          card.appendChild(img);
+        }
+        if (img.getAttribute('src') !== url) { img.classList.remove('loaded'); img.src = url; }
+        else { img.classList.add('loaded'); }
+      }
+
+      var rotTimer = null, thumbEls = [], curItems = [], curIdx = 0;
+
+      function setActiveThumb(i) {
+        for (var j = 0; j < thumbEls.length; j++) thumbEls[j].classList.toggle('active', j === i);
+        // Scroll ONLY the thumbnail strip (never the page) to keep active in view.
+        var el = thumbEls[i];
+        if (el && el.parentNode) {
+          var wrap = el.parentNode;
+          if (wrap.scrollWidth > wrap.clientWidth + 4) {
+            var er = el.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+            wrap.scrollTo({ left: wrap.scrollLeft + (er.left + er.width / 2) - (wr.left + wr.width / 2), behavior: 'smooth' });
+          }
+        }
+      }
+      function showItem(i) {
+        if (!curItems.length) return;
+        curIdx = i;
+        setImg('before', curItems[i].before);
+        setImg('after', curItems[i].after);
+        setActiveThumb(i);
+      }
+      function stopRotation() { if (rotTimer) { clearInterval(rotTimer); rotTimer = null; } }
+      // Infinite auto-scroll through the hero list — loops forever.
+      function startRotation() {
+        stopRotation();
+        if (curItems.length > 1) {
+          rotTimer = setInterval(function () { showItem((curIdx + 1) % curItems.length); }, 4000);
+        }
+      }
+      // Thumbnail strip = the WHOLE published hero list (after-image preview);
+      // click selects → main before/after switches to that card.
+      function buildThumbs() {
+        var wrap = document.querySelector('.concepts .thumbs');
+        var more = document.querySelector('.concepts .more');
+        if (more) more.style.display = curItems.length ? 'none' : '';
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        thumbEls = [];
+        curItems.forEach(function (it, i) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'thumb';
+          var img = document.createElement('img');
+          img.alt = '';
+          img.src = it.after;
+          b.appendChild(img);
+          b.addEventListener('click', function () { showItem(i); startRotation(); });
+          wrap.appendChild(b);
+          thumbEls.push(b);
+        });
+      }
+      function applyHero(items) {
+        if (!items || !items.length) return false;
+        var valid = items.filter(function (it) { return it.before && it.after; });
+        if (!valid.length) return false;
+        curItems = valid;
+        buildThumbs();
+        showItem(0);
+        startRotation();
+        return true;
+      }
+
+      function readCache() {
+        try { return JSON.parse(localStorage.getItem(HERO_CACHE) || 'null'); } catch (e) { return null; }
+      }
+
+      // 1. Instant paint from cache (if any).
+      var cached = readCache();
+      if (cached) applyHero(cached.items);
+
+      // 2. Refresh from API (browser HTTP-cache makes this cheap / 304).
+      fetch(HERO_API, { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (data) {
+          var blocks = data.blocks || [];
+          var block = null;
+          for (var i = 0; i < blocks.length; i++) { if (blocks[i].type === 'hero') { block = blocks[i]; break; } }
+          if (!block) block = blocks[0];
+          var items = ((block && block.items) || []).map(function (it) {
+            var d = it.data || {};
+            return {
+              before: d.before && d.before.image_url,
+              after: d.after && d.after.image_url
+            };
+          }).filter(function (it) { return it.before && it.after; });
+
+          // Only touch DOM/cache when content actually changed (by updated_at).
+          if (!cached || cached.updated_at !== data.updated_at) {
+            if (applyHero(items)) {
+              try { localStorage.setItem(HERO_CACHE, JSON.stringify({ updated_at: data.updated_at, items: items })); } catch (e) {}
+            } else {
+              // No published cards → keep the CSS placeholder, drop stale cache.
+              try { localStorage.removeItem(HERO_CACHE); } catch (e) {}
+            }
+          }
+        })
+        .catch(function () { /* offline / error → keep cache or placeholder */ });
+    })();
+
+    // ===== How it works from API (GET /home-blocks, product × stage) =====
+    // Data-driven + localized (re-renders on language change). Click a product
+    // tab → the whole conveyor (upload photo + every concept) switches to it.
+    // Caching: localStorage instant paint + browser HTTP cache (ETag/304).
+    (function () {
+      var HIW_API = 'https://wnbtsqfdlbjwtetppdng.functions.supabase.co/home-blocks';
+      var HIW_CACHE = 'runpik_hiw_v1';
+      var NOTE = {
+        en: 'Pick a product — see its journey from photo to concepts.',
+        ru: 'Выберите товар — посмотрите его путь от фото до концептов.',
+        hy: 'Ընտրեք ապրանք — տեսեք նրա ճանապարհը լուսանկարից մինչև կոնցեպտներ։'
+      };
+      var BEFORE_LABEL = { en: 'BEFORE', ru: 'ДО', hy: 'ՄԻՆՉ' };
+      var block = null, activeIdx = 0;
+
+      function L(o) { return o ? (o[curLang] || o.en || '') : ''; }
+      function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
+      function setText(sel, t) { var e = document.querySelector(sel); if (e) e.textContent = t; }
+      function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+      function card(url, cls, chipText, chipPos) {
+        var c = el('div', 'hiw-card' + (cls ? ' ' + cls : ''));
+        if (url) { var im = el('img'); im.alt = ''; im.src = url; c.appendChild(im); }
+        if (chipText) { var ch = el('span', 'hiw-chip ' + (chipPos || 'bl')); ch.textContent = chipText; c.appendChild(ch); }
+        return c;
+      }
+
+      function renderConveyor() {
+        var wrap = document.querySelector('[data-hiw="conveyor"]');
+        if (!wrap || !block) return;
+        wrap.innerHTML = '';
+        var stages = block.stages || [];
+        var product = (block.products || [])[activeIdx];
+        if (!product) return;
+        var cells = (product.data && product.data.cells) || {};
+        stages.forEach(function (st, i) {
+          if (i > 0) {
+            var arrow = el('div', 'conv-arrow');
+            arrow.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"/><path d="m12 5 7 7-7 7"/></svg>';
+            wrap.appendChild(arrow);
+          }
+          var col = el('div', 'conv-col');
+          var slabel = el('div', 'conv-slabel');
+          slabel.innerHTML = '<b>' + ('0' + (i + 1)).slice(-2) + '</b> · ' + esc(L(st.title));
+          col.appendChild(slabel);
+
+          var media = cells[st.id] || [];
+          if (st.type === 'before') {
+            var m = media[0];
+            col.appendChild(card(m && m.image_url, 'before', L(BEFORE_LABEL), 'tl'));
+          } else {
+            var cluster = el('div', 'hiw-cluster');
+            media.forEach(function (mm) { cluster.appendChild(card(mm.image_url, 'res', L(mm.label), 'bl')); });
+            col.appendChild(cluster);
+          }
+          var cap = el('div', 'conv-cap ' + (i === 0 ? 'muted' : 'prime'));
+          cap.textContent = L(st.subtitle);
+          col.appendChild(cap);
+          wrap.appendChild(col);
+        });
+      }
+
+      function renderTabs() {
+        var wrap = document.querySelector('[data-hiw="tabs"]');
+        if (!wrap || !block) return;
+        wrap.innerHTML = '';
+        (block.products || []).forEach(function (p, i) {
+          var b = el('button', 'tab' + (i === activeIdx ? ' active' : ''));
+          b.type = 'button';
+          var th = el('span', 'th');
+          var bc = p.data && p.data.cells && p.data.cells.before;
+          var thumb = bc && bc[0] && bc[0].image_url;
+          if (thumb) { var im = el('img'); im.alt = ''; im.src = thumb; th.appendChild(im); }
+          var tn = el('span', 'tn'); tn.textContent = L(p.data && p.data.label);
+          b.appendChild(th); b.appendChild(tn);
+          b.addEventListener('click', function () { activeIdx = i; renderTabs(); renderConveyor(); });
+          wrap.appendChild(b);
+        });
+      }
+
+      function render() {
+        var sec = document.getElementById('how-it-works');
+        if (!block || !(block.products || []).length) { if (sec) sec.style.display = 'none'; return; }
+        if (sec) sec.style.display = '';
+        if (activeIdx >= block.products.length) activeIdx = 0;
+        setText('[data-hiw="kicker"]', L(block.title));
+        setText('[data-hiw="headline"]', L(block.subtitle));
+        setText('[data-hiw="note"]', L(NOTE));
+        setText('[data-hiw="footer"]', L(block.footer));
+        renderTabs();
+        renderConveyor();
+      }
+      hiwRender = render;
+
+      function readCache() { try { return JSON.parse(localStorage.getItem(HIW_CACHE) || 'null'); } catch (e) { return null; } }
+
+      var cached = readCache();
+      if (cached && cached.block) { block = cached.block; render(); }
+
+      fetch(HIW_API, { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (data) {
+          var blk = (data.blocks || []).filter(function (b) { return b.type === 'how_it_works'; })[0] || (data.blocks || [])[0];
+          if (!cached || cached.updated_at !== data.updated_at) {
+            block = blk || null;
+            render();
+            try { localStorage.setItem(HIW_CACHE, JSON.stringify({ updated_at: data.updated_at, block: blk })); } catch (e) {}
+          }
+        })
+        .catch(function () { /* offline / error → keep cache or hidden */ });
+    })();
+  </script>
+
 </body>
 </html>
