@@ -302,19 +302,29 @@
       var HERO_API = 'https://wnbtsqfdlbjwtetppdng.functions.supabase.co/landing-blocks?type=hero';
       var HERO_CACHE = 'runpik_hero_v1';
 
+      // Crossfade: stack a new <img> on top and fade it in once loaded, then
+      // drop the old layer. Shimmer shows only on the very first load (when
+      // there's nothing underneath yet) so swaps never flash a blank/placeholder.
       function setImg(side, url) {
         var card = document.querySelector('.bacard.' + side);
         if (!card || !url) return;
-        var img = card.querySelector('.ba-img');
-        if (!img) {
-          img = document.createElement('img');
-          img.className = 'ba-img';
-          img.alt = '';
-          img.addEventListener('load', function () { img.classList.add('loaded'); });
-          card.appendChild(img);
-        }
-        if (img.getAttribute('src') !== url) { img.classList.remove('loaded'); img.src = url; }
-        else { img.classList.add('loaded'); }
+        var current = card.querySelector('.ba-img.loaded');
+        if (current && current.getAttribute('src') === url) return;
+        if (!current) card.classList.add('is-loading');
+        var img = document.createElement('img');
+        img.className = 'ba-img';
+        img.alt = '';
+        img.addEventListener('load', function () {
+          card.classList.remove('is-loading');
+          img.classList.add('loaded');
+          setTimeout(function () {
+            var all = card.querySelectorAll('.ba-img');
+            for (var k = 0; k < all.length - 1; k++) all[k].remove();
+          }, 480);
+        });
+        img.addEventListener('error', function () { card.classList.remove('is-loading'); });
+        card.appendChild(img);
+        img.src = url;
       }
 
       var rotTimer = null, thumbEls = [], curItems = [], curIdx = 0;
@@ -438,7 +448,14 @@
 
       function card(url, cls, chipText, chipPos) {
         var c = el('div', 'hiw-card' + (cls ? ' ' + cls : ''));
-        if (url) { var im = el('img'); im.alt = ''; im.src = url; c.appendChild(im); }
+        if (url) {
+          c.classList.add('is-loading');
+          var im = el('img'); im.alt = '';
+          im.addEventListener('load', function () { c.classList.remove('is-loading'); im.classList.add('loaded'); });
+          im.addEventListener('error', function () { c.classList.remove('is-loading'); });
+          im.src = url;
+          c.appendChild(im);
+        }
         if (chipText) { var ch = el('span', 'hiw-chip ' + (chipPos || 'bl')); ch.textContent = chipText; c.appendChild(ch); }
         return c;
       }
@@ -478,6 +495,26 @@
         });
       }
 
+      // Switch product smoothly: highlight the tab (no thumbnail rebuild) and
+      // crossfade the conveyor (fade out → swap → fade in) instead of a hard
+      // instant rebuild.
+      function selectProduct(i) {
+        if (i === activeIdx) return;
+        activeIdx = i;
+        var tabsWrap = document.querySelector('[data-hiw="tabs"]');
+        if (tabsWrap) {
+          var tabs = tabsWrap.querySelectorAll('.tab');
+          for (var t = 0; t < tabs.length; t++) tabs[t].classList.toggle('active', t === i);
+        }
+        var conv = document.querySelector('[data-hiw="conveyor"]');
+        if (conv) {
+          conv.classList.add('switching');
+          setTimeout(function () { renderConveyor(); conv.classList.remove('switching'); }, 220);
+        } else {
+          renderConveyor();
+        }
+      }
+
       function renderTabs() {
         var wrap = document.querySelector('[data-hiw="tabs"]');
         if (!wrap || !block) return;
@@ -491,7 +528,7 @@
           if (thumb) { var im = el('img'); im.alt = ''; im.src = thumb; th.appendChild(im); }
           var tn = el('span', 'tn'); tn.textContent = L(p.data && p.data.label);
           b.appendChild(th); b.appendChild(tn);
-          b.addEventListener('click', function () { activeIdx = i; renderTabs(); renderConveyor(); });
+          b.addEventListener('click', function () { selectProduct(i); });
           wrap.appendChild(b);
         });
       }
