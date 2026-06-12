@@ -165,6 +165,63 @@
     <div class="scroll-hint" data-ins="hint"></div>
   </section>
 
+  <!-- ===================== EXAMPLES BY CATEGORY (GET /shot-types, random per session) ===================== -->
+  <section class="examples" id="examples" style="display:none">
+    <div class="ex-inner">
+      <div class="ex-head">
+        <div class="eyebrow" data-ex="kicker">Any product</div>
+        <h2 class="ex-h" data-ex="headline">Works for every category</h2>
+        <p class="ex-s" data-ex="sub"></p>
+      </div>
+      <div class="ex-grid" data-ex="grid"></div>
+    </div>
+  </section>
+
+  <!-- ===================== COMPARISON (static) ===================== -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <linearGradient id="cg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A7DFF"/><stop offset="0.5" stop-color="#7B5BFF"/><stop offset="1" stop-color="#FF5B9B"/></linearGradient>
+  </defs></svg>
+  <section class="cmp" id="comparison">
+    <div class="cmp-inner">
+      <div class="sec-head">
+        <div class="eyebrow" data-i18n="cmp.eyebrow">Why Runpik</div>
+        <h2 class="h" data-i18n="cmp.headline">Professional visuals in minutes</h2>
+        <p class="s" data-i18n="cmp.sub">The traditional path — photographer, studio, retoucher — takes days and costs a fortune. Runpik does the same in minutes.</p>
+      </div>
+
+      <div class="cards">
+        <div class="trad">
+          <div class="cmp-label" data-i18n="cmp.trad.label">Traditional</div>
+          <div class="stat" data-i18n="cmp.trad.stat">3–7 days</div>
+          <div class="substat" data-i18n="cmp.trad.substat">from $50 per product</div>
+          <div class="card-div"></div>
+          <div class="feats">
+            <div class="feat"><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7 7 17"/><path d="m7 7 10 10"/></svg></span><span class="ft" data-i18n="cmp.trad.f1">Photo shoot, location, lighting, props</span></div>
+            <div class="feat"><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7 7 17"/><path d="m7 7 10 10"/></svg></span><span class="ft" data-i18n="cmp.trad.f2">Retouching and editing — many iterations</span></div>
+            <div class="feat"><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7 7 17"/><path d="m7 7 10 10"/></svg></span><span class="ft" data-i18n="cmp.trad.f3">Days of back-and-forth</span></div>
+            <div class="feat"><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7 7 17"/><path d="m7 7 10 10"/></svg></span><span class="ft" data-i18n="cmp.trad.f4">Expensive per single product</span></div>
+          </div>
+        </div>
+
+        <div class="runpik">
+          <div class="cmp-label">Runpik</div>
+          <div class="stat" data-i18n="cmp.runpik.stat">~5 minutes</div>
+          <div class="substat" data-i18n="cmp.runpik.substat">from $0.39 per photo</div>
+          <div class="card-div"></div>
+          <div class="feats">
+            <div class="feat"><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="url(#cg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="ft" data-i18n="cmp.runpik.f1">Upload a photo, pick a concept — 2 taps</span></div>
+            <div class="feat"><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="url(#cg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="ft" data-i18n="cmp.runpik.f2">Unlimited variations, instantly</span></div>
+            <div class="feat"><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="url(#cg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="ft" data-i18n="cmp.runpik.f3">Results in minutes, any time</span></div>
+            <div class="feat"><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="url(#cg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="ft" data-i18n="cmp.runpik.f4">A fraction of the cost</span></div>
+          </div>
+          <a class="gbtn" href="#start" data-i18n="hero.try">Try for free</a>
+        </div>
+      </div>
+
+      <div class="cmp-reassure" data-i18n="hero.reassure">6 free credits on signup · No credit card required</div>
+    </div>
+  </section>
+
   <!-- ===================== TICKER (animated line) — below How it works ===================== -->
   <div class="ticker"><div class="tk-track" data-ticker></div></div>
 
@@ -186,6 +243,7 @@
     var curLang = 'en';
     var hiwRender = null;
     var inspireLoad = null;
+    var examplesLoad = null;
 
     // ===== i18n dictionary — locales: en | ru | hy (per backend profiles.locale) =====
     var I18N = {
@@ -205,7 +263,23 @@
         'hero.reassure': '6 free credits on signup · No credit card required',
         'ba.before': 'BEFORE', 'ba.after': 'AFTER',
         'ba.beforecap': 'Your phone photo', 'ba.aftercap': 'Studio result in minutes',
-        'concepts.more': '+ more concepts — catalog, on-model, flat-lay'
+        'concepts.more': '+ more concepts — catalog, on-model, flat-lay',
+        'cmp.eyebrow': 'Why Runpik',
+        'cmp.headline': 'Professional visuals in minutes',
+        'cmp.sub': 'The traditional path — photographer, studio, retoucher — takes days and costs a fortune. Runpik does the same in minutes.',
+        'cmp.trad.label': 'Traditional',
+        'cmp.trad.stat': '3–7 days',
+        'cmp.trad.substat': 'from $50 per product',
+        'cmp.trad.f1': 'Photo shoot, location, lighting, props',
+        'cmp.trad.f2': 'Retouching and editing — many iterations',
+        'cmp.trad.f3': 'Days of back-and-forth',
+        'cmp.trad.f4': 'Expensive per single product',
+        'cmp.runpik.stat': '~5 minutes',
+        'cmp.runpik.substat': 'from $0.39 per photo',
+        'cmp.runpik.f1': 'Upload a photo, pick a concept — 2 taps',
+        'cmp.runpik.f2': 'Unlimited variations, instantly',
+        'cmp.runpik.f3': 'Results in minutes, any time',
+        'cmp.runpik.f4': 'A fraction of the cost'
       },
       ru: {
         'nav.product': 'Продукт', 'nav.pricing': 'Цены', 'nav.blog': 'Блог', 'nav.try': 'Попробовать бесплатно',
@@ -223,7 +297,23 @@
         'hero.reassure': '6 бесплатных кредитов при регистрации · Без карты',
         'ba.before': 'ДО', 'ba.after': 'ПОСЛЕ',
         'ba.beforecap': 'Ваше фото с телефона', 'ba.aftercap': 'Студийный результат за минуты',
-        'concepts.more': '+ ещё концепты — каталог, на модели, flat-lay'
+        'concepts.more': '+ ещё концепты — каталог, на модели, flat-lay',
+        'cmp.eyebrow': 'Почему Runpik',
+        'cmp.headline': 'Профессиональные визуалы за минуты',
+        'cmp.sub': 'Традиционный путь — фотограф, студия, ретушёр — занимает дни и стоит дорого. Runpik делает то же за минуты.',
+        'cmp.trad.label': 'Традиционно',
+        'cmp.trad.stat': '3–7 дней',
+        'cmp.trad.substat': 'от $50 за товар',
+        'cmp.trad.f1': 'Съёмка, локация, свет, реквизит',
+        'cmp.trad.f2': 'Ретушь и правки — много итераций',
+        'cmp.trad.f3': 'Дни переписки и согласований',
+        'cmp.trad.f4': 'Дорого за каждый товар',
+        'cmp.runpik.stat': '~5 минут',
+        'cmp.runpik.substat': 'от $0.39 за фото',
+        'cmp.runpik.f1': 'Загрузите фото, выберите концепт — 2 тапа',
+        'cmp.runpik.f2': 'Безлимит вариаций, мгновенно',
+        'cmp.runpik.f3': 'Результат за минуты, в любое время',
+        'cmp.runpik.f4': 'В разы дешевле'
       },
       hy: {
         'nav.product': 'Ապրանք', 'nav.pricing': 'Գներ', 'nav.blog': 'Բլոգ', 'nav.try': 'Փորձել անվճար',
@@ -241,7 +331,23 @@
         'hero.reassure': '6 անվճար կրեդիտ գրանցման ժամանակ · Քարտ պետք չէ',
         'ba.before': 'ՄԻՆՉ', 'ba.after': 'ՀԵՏՈ',
         'ba.beforecap': 'Ձեր հեռախոսի լուսանկարը', 'ba.aftercap': 'Ստուդիական արդյունք՝ րոպեների ընթացքում',
-        'concepts.more': '+ այլ կոնցեպտներ՝ կատալոգ, մոդելի վրա, flat-lay'
+        'concepts.more': '+ այլ կոնցեպտներ՝ կատալոգ, մոդելի վրա, flat-lay',
+        'cmp.eyebrow': 'Ինչու Runpik',
+        'cmp.headline': 'Պրոֆեսիոնալ վիզուալներ րոպեների ընթացքում',
+        'cmp.sub': 'Ավանդական ճանապարհը՝ լուսանկարիչ, ստուդիա, ռետուշ՝ տևում է օրեր և արժե թանկ։ Runpik-ը նույնն անում է րոպեների ընթացքում։',
+        'cmp.trad.label': 'Ավանդական',
+        'cmp.trad.stat': '3–7 օր',
+        'cmp.trad.substat': '$50-ից մեկ ապրանքի համար',
+        'cmp.trad.f1': 'Նկարահանում, լոկացիա, լույս, ռեկվիզիտ',
+        'cmp.trad.f2': 'Ռետուշ և խմբագրում՝ բազմաթիվ կրկնություններ',
+        'cmp.trad.f3': 'Օրերով նամակագրություն և համաձայնեցում',
+        'cmp.trad.f4': 'Թանկ՝ յուրաքանչյուր ապրանքի համար',
+        'cmp.runpik.stat': '~5 րոպե',
+        'cmp.runpik.substat': '$0.39-ից մեկ լուսանկարի համար',
+        'cmp.runpik.f1': 'Վերբեռնեք լուսանկար, ընտրեք կոնցեպտ՝ 2 հպում',
+        'cmp.runpik.f2': 'Անսահման տարբերակներ՝ ակնթարթորեն',
+        'cmp.runpik.f3': 'Արդյունք րոպեների ընթացքում, ցանկացած ժամանակ',
+        'cmp.runpik.f4': 'Մի քանի անգամ էժան'
       }
     };
     var TICKERS = {
@@ -274,6 +380,7 @@
       try { localStorage.setItem('runpik_lang', lang); } catch (e) {}
       if (hiwRender) hiwRender();
       if (inspireLoad) inspireLoad(lang);
+      if (examplesLoad) examplesLoad(lang);
     }
 
     // ===== Product dropdown =====
@@ -652,6 +759,91 @@
           .catch(function () { /* offline / error → keep cache or hidden */ });
       }
       inspireLoad = load;
+      load(curLang);
+    })();
+
+    // ===== Examples by Category from API (GET /shot-types) =====
+    // One card per category, each showing a RANDOM shot-type example image from
+    // that category. The random pick is frozen per browser session
+    // (sessionStorage) → stable across re-renders/language changes, re-rolls on
+    // a fresh session. Shimmer + fade-in + localStorage/HTTP caching. Category
+    // names localize; re-fetch on language change (images stay frozen).
+    (function () {
+      var ST_API = 'https://wnbtsqfdlbjwtetppdng.functions.supabase.co/shot-types';
+      var PICKS_KEY = 'runpik_ex_picks';
+      var CHROME = {
+        kicker: { en: 'Any product', ru: 'Любой товар', hy: 'Ցանկացած ապրանք' },
+        headline: { en: 'Works for every category', ru: 'Работает для любой категории', hy: 'Աշխատում է ամեն կատեգորիայի համար' },
+        sub: {
+          en: 'Show us your product — get a clean, professional photo. Whatever you sell.',
+          ru: 'Покажите свой товар — получите чистое профессиональное фото. Что бы вы ни продавали.',
+          hy: 'Ցույց տվեք ձեր ապրանքը — ստացեք մաքուր պրոֆեսիոնալ լուսանկար։ Ինչ էլ որ վաճառեք։'
+        }
+      };
+
+      function L(o) { return o ? (o[curLang] || o.en || '') : ''; }
+      function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
+      function setText(sel, t) { var e = document.querySelector(sel); if (e) e.textContent = t; }
+      function pretty(slug) { return (slug || '').replace(/_/g, ' '); }
+      function readPicks() { try { return JSON.parse(sessionStorage.getItem(PICKS_KEY) || '{}'); } catch (e) { return {}; } }
+      function savePicks(p) { try { sessionStorage.setItem(PICKS_KEY, JSON.stringify(p)); } catch (e) {} }
+
+      function render(data) {
+        if (!data) return;
+        var shotTypes = data.shot_types || {};
+        var cats = data.categories || {};
+        var picks = readPicks();
+        var cards = [];
+        Object.keys(shotTypes).forEach(function (catSlug) {
+          if (catSlug === 'other') return; // misc catch-all — keep the grid clean (3x2)
+          var list = (shotTypes[catSlug] || []).filter(function (s) { return s.image_url; });
+          if (!list.length) return;
+          var picked = picks[catSlug] && list.filter(function (s) { return s.slug === picks[catSlug]; })[0];
+          if (!picked) { picked = list[Math.floor(Math.random() * list.length)]; picks[catSlug] = picked.slug; }
+          cards.push({ image: picked.image_url, shot: pretty(picked.slug), name: cats[catSlug] || catSlug });
+        });
+        savePicks(picks);
+
+        var sec = document.getElementById('examples');
+        if (!cards.length) { if (sec) sec.style.display = 'none'; return; }
+        if (sec) sec.style.display = '';
+        setText('[data-ex="kicker"]', L(CHROME.kicker));
+        setText('[data-ex="headline"]', L(CHROME.headline));
+        setText('[data-ex="sub"]', L(CHROME.sub));
+        var g = document.querySelector('[data-ex="grid"]');
+        if (!g) return;
+        g.innerHTML = '';
+        cards.forEach(function (c) {
+          var card = el('div', 'ccard');
+          card.classList.add('is-loading');
+          var im = el('img'); im.alt = '';
+          im.addEventListener('load', function () { card.classList.remove('is-loading'); im.classList.add('loaded'); });
+          im.addEventListener('error', function () { card.classList.remove('is-loading'); });
+          im.src = c.image; card.appendChild(im);
+          card.appendChild(el('div', 'shade'));
+          var meta = el('div', 'meta');
+          var cat = el('div', 'cat'); cat.textContent = c.shot;
+          var nm = el('div', 'nm'); nm.textContent = c.name;
+          meta.appendChild(cat); meta.appendChild(nm); card.appendChild(meta);
+          g.appendChild(card);
+        });
+      }
+
+      function load(lang) {
+        lang = lang || curLang;
+        var key = 'runpik_shottypes_' + lang, cached = null;
+        try { cached = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) {}
+        if (cached) render(cached);
+        fetch(ST_API + '?locale=' + encodeURIComponent(lang), { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function (data) {
+            if (cached && JSON.stringify(cached) === JSON.stringify(data)) return; // unchanged
+            render(data);
+            try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+          })
+          .catch(function () { /* offline / error → keep cache or hidden */ });
+      }
+      examplesLoad = load;
       load(curLang);
     })();
   </script>
