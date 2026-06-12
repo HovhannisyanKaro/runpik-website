@@ -1,0 +1,21 @@
+# Cloudflare Pages custom headers.
+# Always revalidate the HTML + stylesheets so a new deploy never pairs fresh
+# HTML with a stale cached CSS (which caused a brief unstyled flash until a
+# hard refresh). ETag still gives cheap 304s when nothing changed.
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+/landing.css
+  Cache-Control: public, max-age=0, must-revalidate
+/style.css
+  Cache-Control: public, max-age=0, must-revalidate
+/about.html
+  Cache-Control: public, max-age=0, must-revalidate
+/faq.html
+  Cache-Control: public, max-age=0, must-revalidate
+/terms.html
+  Cache-Control: public, max-age=0, must-revalidate
+/privacy.html
+  Cache-Control: public, max-age=0, must-revalidate

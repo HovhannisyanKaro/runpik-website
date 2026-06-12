@@ -135,6 +135,9 @@
     </div>
   </main>
 
+  <!-- ===================== TICKER (animated line) — under hero ===================== -->
+  <div class="ticker"><div class="tk-track" data-ticker></div></div>
+
   <!-- ===================== HOW IT WORKS (GET /home-blocks) ===================== -->
   <section class="hiw" id="how-it-works" style="display:none">
     <div class="hiw-inner">
@@ -240,19 +243,67 @@
     </div>
   </section>
 
-  <!-- ===================== TICKER (animated line) — below How it works ===================== -->
-  <div class="ticker"><div class="tk-track" data-ticker></div></div>
-
-  <!-- ===================== FOOTER (content unchanged) ===================== -->
+  <!-- ===================== FOOTER (rich) ===================== -->
   <footer>
-    <nav>
-      <a href="about.html">About</a>
-      <a href="faq.html">FAQ</a>
-      <a href="terms.html">Terms of Service</a>
-      <a href="privacy.html">Privacy Policy</a>
-      <a href="api-docs/">API docs</a>
-    </nav>
-    <p class="copyright">&copy; 2026 Runpik. All rights reserved.</p>
+    <div class="foot-inner">
+      <div class="foot-top">
+        <div class="foot-brand">
+          <a class="brand" href="index.html"><img class="mark" src="assets/runpik-logo.png" alt="Runpik"><span class="word">Runpik</span></a>
+          <p class="tagline" data-i18n="foot.tagline">AI product photography — fast, no production team needed.</p>
+          <a class="openapp" href="#start"><span data-i18n="foot.openapp">Open app</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"/><path d="m12 5 7 7-7 7"/></svg></a>
+        </div>
+
+        <div class="foot-cols">
+          <div class="col">
+            <div class="col-h" data-i18n="nav.product">Product</div>
+            <div class="col-links">
+              <a href="#how-it-works" data-i18n="dd.how.t">How it works</a>
+              <a href="#inspire" data-i18n="dd.inspire.t">Inspire styles</a>
+              <a href="#examples" data-i18n="dd.examples.t">Examples</a>
+              <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
+            </div>
+          </div>
+          <div class="col">
+            <div class="col-h" data-i18n="foot.company">Company</div>
+            <div class="col-links">
+              <a href="about.html" data-i18n="foot.about">About us</a>
+              <a href="#blog" data-i18n="foot.blog">Blog</a>
+              <a href="faq.html" data-i18n="foot.faq">FAQ</a>
+              <a href="#contact" data-i18n="foot.contact">Contact</a>
+            </div>
+          </div>
+          <div class="col">
+            <div class="col-h" data-i18n="foot.legal">Legal</div>
+            <div class="col-links">
+              <a href="privacy.html" data-i18n="foot.privacy">Privacy Policy</a>
+              <a href="terms.html" data-i18n="foot.terms">Terms of Service</a>
+              <a href="api-docs/" data-i18n="foot.apidocs">API docs</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="foot-soc">
+          <div class="soc-h" data-i18n="foot.follow">Follow us</div>
+          <div class="socials">
+            <a class="soc" href="#" target="_blank" rel="noopener" aria-label="YouTube"><svg viewBox="0 0 24 24" fill="none"><rect x="2" y="5" width="20" height="14" rx="4.5" stroke="currentColor" stroke-width="1.6"/><path d="M10.2 8.8 15.2 12l-5 3.2z" fill="currentColor"/></svg></a>
+            <a class="soc" href="#" target="_blank" rel="noopener" aria-label="TikTok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 4v9.6a3.4 3.4 0 1 1-3.2-3.4"/><path d="M13.5 6.2c.7 1.8 2.2 3 4.3 3.2"/></svg></a>
+            <a class="soc" href="#" target="_blank" rel="noopener" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r="1.1" fill="currentColor" stroke="none"/></svg></a>
+            <a class="soc" href="#" target="_blank" rel="noopener" aria-label="X"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4.5 4.5 19.5 19.5"/><path d="M19.5 4.5 4.5 19.5"/></svg></a>
+            <a class="soc" href="#" target="_blank" rel="noopener" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 8.2h2V5.4c-.4 0-1.2-.1-2.1-.1-2 0-3.4 1.2-3.4 3.5v1.9H8.4v2.9h2.6V21h3.1v-7.4h2.5l.4-2.9h-2.9V9c0-.5.3-.8 1-.8z"/></svg></a>
+            <a class="soc" href="#" target="_blank" rel="noopener" aria-label="Telegram"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 4.3 2.8 11.5c-.9.3-.9 1.5 0 1.8l4.5 1.4 1.7 5.2c.2.7 1.1.8 1.6.3l2.5-2.4 4.5 3.3c.6.5 1.5.1 1.7-.6l3.1-14.8c.2-.9-.7-1.7-1.4-1.4zM7.9 13.3l9.4-5.8c.2-.1.4.2.2.3l-7.6 7c-.3.2-.4.6-.5 1l-.3 2.1z"/></svg></a>
+            <a class="soc" href="#" target="_blank" rel="noopener" aria-label="WhatsApp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 20.5l1.3-4.1a8 8 0 1 1 3 2.9z"/><path d="M9 8.6c.2-.5.4-.5.7-.5h.5c.2 0 .4 0 .6.5l.6 1.4c.1.2 0 .4-.1.5l-.4.5c-.1.2-.2.3 0 .6.3.5.8 1.1 1.4 1.5.5.4.8.4 1 .3l.5-.5c.2-.2.4-.1.5-.1l1.3.7c.3.1.4.3.4.4 0 .6-.4 1.3-.8 1.5-.7.4-1.5.4-3-.3-1.8-.8-3-2.5-3.4-3.1-.3-.5-.8-1.5-.8-2.4 0-.6.2-1 .5-1.4z" fill="currentColor" stroke="none"/></svg></a>
+          </div>
+          <div class="soc-note" data-i18n="foot.support">Support on Telegram &amp; WhatsApp</div>
+        </div>
+      </div>
+
+      <div class="foot-div"></div>
+
+      <div class="foot-bottom">
+        <div class="copy">&copy; 2026 Runpik. All rights reserved.</div>
+        <span class="dotcom">runpik.com</span>
+      </div>
+    </div>
   </footer>
 
   <script>
@@ -298,7 +349,20 @@
         'cmp.runpik.f1': 'Upload a photo, pick a concept — 2 taps',
         'cmp.runpik.f2': 'Unlimited variations, instantly',
         'cmp.runpik.f3': 'Results in minutes, any time',
-        'cmp.runpik.f4': 'A fraction of the cost'
+        'cmp.runpik.f4': 'A fraction of the cost',
+        'foot.tagline': 'AI product photography — fast, no production team needed.',
+        'foot.openapp': 'Open app',
+        'foot.company': 'Company',
+        'foot.legal': 'Legal',
+        'foot.about': 'About us',
+        'foot.blog': 'Blog',
+        'foot.faq': 'FAQ',
+        'foot.contact': 'Contact',
+        'foot.privacy': 'Privacy Policy',
+        'foot.terms': 'Terms of Service',
+        'foot.apidocs': 'API docs',
+        'foot.follow': 'Follow us',
+        'foot.support': 'Support on Telegram & WhatsApp'
       },
       ru: {
         'nav.product': 'Продукт', 'nav.pricing': 'Цены', 'nav.blog': 'Блог', 'nav.try': 'Попробовать бесплатно',
@@ -332,7 +396,20 @@
         'cmp.runpik.f1': 'Загрузите фото, выберите концепт — 2 тапа',
         'cmp.runpik.f2': 'Безлимит вариаций, мгновенно',
         'cmp.runpik.f3': 'Результат за минуты, в любое время',
-        'cmp.runpik.f4': 'В разы дешевле'
+        'cmp.runpik.f4': 'В разы дешевле',
+        'foot.tagline': 'AI-фотосъёмка товаров — быстро, без продакшн-команды.',
+        'foot.openapp': 'Открыть приложение',
+        'foot.company': 'Компания',
+        'foot.legal': 'Правовое',
+        'foot.about': 'О нас',
+        'foot.blog': 'Блог',
+        'foot.faq': 'FAQ',
+        'foot.contact': 'Контакты',
+        'foot.privacy': 'Политика конфиденциальности',
+        'foot.terms': 'Условия использования',
+        'foot.apidocs': 'API-документация',
+        'foot.follow': 'Мы в соцсетях',
+        'foot.support': 'Поддержка в Telegram и WhatsApp'
       },
       hy: {
         'nav.product': 'Ապրանք', 'nav.pricing': 'Գներ', 'nav.blog': 'Բլոգ', 'nav.try': 'Փորձել անվճար',
@@ -366,7 +443,20 @@
         'cmp.runpik.f1': 'Վերբեռնեք լուսանկար, ընտրեք կոնցեպտ՝ 2 հպում',
         'cmp.runpik.f2': 'Անսահման տարբերակներ՝ ակնթարթորեն',
         'cmp.runpik.f3': 'Արդյունք րոպեների ընթացքում, ցանկացած ժամանակ',
-        'cmp.runpik.f4': 'Մի քանի անգամ էժան'
+        'cmp.runpik.f4': 'Մի քանի անգամ էժան',
+        'foot.tagline': 'AI ապրանքների լուսանկարում՝ արագ, առանց պրոդակշն-թիմի։',
+        'foot.openapp': 'Բացել հավելվածը',
+        'foot.company': 'Ընկերություն',
+        'foot.legal': 'Իրավական',
+        'foot.about': 'Մեր մասին',
+        'foot.blog': 'Բլոգ',
+        'foot.faq': 'ՀՏՀ',
+        'foot.contact': 'Կապ',
+        'foot.privacy': 'Գաղտնիության քաղաքականություն',
+        'foot.terms': 'Օգտագործման պայմաններ',
+        'foot.apidocs': 'API փաստաթղթեր',
+        'foot.follow': 'Հետևեք մեզ',
+        'foot.support': 'Աջակցություն Telegram-ում և WhatsApp-ում'
       }
     };
     var TICKERS = {
