@@ -149,6 +149,22 @@
     </div>
   </section>
 
+  <!-- ===================== INSPIRE STYLES (GET /styles) ===================== -->
+  <section class="inspire" id="inspire" style="display:none">
+    <div class="ins-head">
+      <div class="ins-head-l">
+        <div class="kicker" data-ins="kicker">Inspire</div>
+        <h2 class="ins-h" data-ins="headline">Styles that sell</h2>
+        <p class="ins-s" data-ins="sub"></p>
+      </div>
+      <a class="viewall" href="#styles"><span data-ins="viewall">View all styles</span>
+        <span class="arr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"/><path d="m12 5 7 7-7 7"/></svg></span>
+      </a>
+    </div>
+    <div class="gallery" data-ins="gallery"></div>
+    <div class="scroll-hint" data-ins="hint"></div>
+  </section>
+
   <!-- ===================== TICKER (animated line) — below How it works ===================== -->
   <div class="ticker"><div class="tk-track" data-ticker></div></div>
 
@@ -169,6 +185,7 @@
     // re-localizes when the language switches.
     var curLang = 'en';
     var hiwRender = null;
+    var inspireLoad = null;
 
     // ===== i18n dictionary — locales: en | ru | hy (per backend profiles.locale) =====
     var I18N = {
@@ -256,6 +273,7 @@
       });
       try { localStorage.setItem('runpik_lang', lang); } catch (e) {}
       if (hiwRender) hiwRender();
+      if (inspireLoad) inspireLoad(lang);
     }
 
     // ===== Product dropdown =====
@@ -563,6 +581,78 @@
           }
         })
         .catch(function () { /* offline / error → keep cache or hidden */ });
+    })();
+
+    // ===== Inspire Styles from API (GET /styles?locale=) =====
+    // Published styles gallery (after-image), localized server-side → re-fetch
+    // on language change. Shimmer while images load + localStorage cache (per
+    // locale) + browser HTTP cache (ETag/304). Hidden if no published styles.
+    (function () {
+      var STYLES_API = 'https://wnbtsqfdlbjwtetppdng.functions.supabase.co/styles';
+      var CHROME = {
+        kicker: { en: 'Inspire', ru: 'Inspire', hy: 'Inspire' },
+        headline: { en: 'Styles that sell', ru: 'Стили, которые продают', hy: 'Ոճեր, որ վաճառում են' },
+        sub: {
+          en: 'Curated looks crafted for marketplace sellers — apply any style in one tap.',
+          ru: 'Подобранные образы для продавцов маркетплейсов — примените любой стиль в один тап.',
+          hy: 'Մարկետփլեյս-վաճառողների համար ընտրված տեսքեր — կիրառեք ցանկացած ոճ մեկ հպումով։'
+        },
+        viewall: { en: 'View all styles', ru: 'Все стили', hy: 'Բոլոր ոճերը' },
+        hint: { en: 'Scroll to browse {n} styles', ru: 'Листайте — {n} стилей', hy: 'Թերթեք՝ {n} ոճ' }
+      };
+
+      function L(o) { return o ? (o[curLang] || o.en || '') : ''; }
+      function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
+      function setText(sel, t) { var e = document.querySelector(sel); if (e) e.textContent = t; }
+      function ckey(lang) { return 'runpik_styles_' + lang; }
+      function readCache(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+
+      function render(styles) {
+        var sec = document.getElementById('inspire');
+        if (!styles || !styles.length) { if (sec) sec.style.display = 'none'; return; }
+        if (sec) sec.style.display = '';
+        setText('[data-ins="kicker"]', L(CHROME.kicker));
+        setText('[data-ins="headline"]', L(CHROME.headline));
+        setText('[data-ins="sub"]', L(CHROME.sub));
+        setText('[data-ins="viewall"]', L(CHROME.viewall));
+        setText('[data-ins="hint"]', L(CHROME.hint).replace('{n}', styles.length));
+        var g = document.querySelector('[data-ins="gallery"]');
+        if (!g) return;
+        g.innerHTML = '';
+        styles.forEach(function (s) {
+          var url = s.after_image_url || s.before_image_url;
+          var c = el('div', 'scard');
+          if (url) {
+            c.classList.add('is-loading');
+            var im = el('img'); im.alt = '';
+            im.addEventListener('load', function () { c.classList.remove('is-loading'); im.classList.add('loaded'); });
+            im.addEventListener('error', function () { c.classList.remove('is-loading'); });
+            im.src = url; c.appendChild(im);
+          }
+          c.appendChild(el('div', 'shade'));
+          var meta = el('div', 'meta');
+          var nm = el('div', 'nm'); nm.textContent = s.title || '';
+          var ds = el('div', 'ds'); ds.textContent = s.description || '';
+          meta.appendChild(nm); meta.appendChild(ds); c.appendChild(meta);
+          g.appendChild(c);
+        });
+      }
+
+      function load(lang) {
+        lang = lang || curLang;
+        var cached = readCache(ckey(lang));
+        if (cached && cached.styles) render(cached.styles);
+        fetch(STYLES_API + '?locale=' + encodeURIComponent(lang), { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function (data) {
+            var styles = data.styles || [];
+            render(styles);
+            try { localStorage.setItem(ckey(lang), JSON.stringify({ styles: styles })); } catch (e) {}
+          })
+          .catch(function () { /* offline / error → keep cache or hidden */ });
+      }
+      inspireLoad = load;
+      load(curLang);
     })();
   </script>
 
