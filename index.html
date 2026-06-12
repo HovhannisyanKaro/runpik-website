@@ -222,6 +222,24 @@
     </div>
   </section>
 
+  <!-- ===================== PRICING (static — 4 credit packs) ===================== -->
+  <section class="pricing" id="pricing">
+    <div class="pricing-inner">
+      <div class="sec-head">
+        <div class="eyebrow" data-px="eyebrow">Pricing</div>
+        <h2 class="h" data-px="headline">Simple credit-based pricing</h2>
+        <p class="s" data-px="sub"></p>
+      </div>
+      <div class="pcards" data-px="cards"></div>
+      <div class="freewrap">
+        <div class="freebar">
+          <span class="plus">+3</span>
+          <span class="ftext" data-px="free"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ===================== TICKER (animated line) — below How it works ===================== -->
   <div class="ticker"><div class="tk-track" data-ticker></div></div>
 
@@ -244,6 +262,7 @@
     var hiwRender = null;
     var inspireLoad = null;
     var examplesLoad = null;
+    var pricingRender = null;
 
     // ===== i18n dictionary — locales: en | ru | hy (per backend profiles.locale) =====
     var I18N = {
@@ -381,6 +400,7 @@
       if (hiwRender) hiwRender();
       if (inspireLoad) inspireLoad(lang);
       if (examplesLoad) examplesLoad(lang);
+      if (pricingRender) pricingRender();
     }
 
     // ===== Product dropdown =====
@@ -845,6 +865,101 @@
       }
       examplesLoad = load;
       load(curLang);
+    })();
+
+    // ===== Pricing (static, 4 credit packs) — placeholder numbers =====
+    // Hardcoded tiers; localized en/ru/hy; re-renders on language change.
+    // Replace TIERS numbers when real pricing is available.
+    (function () {
+      var PX = {
+        eyebrow: { en: 'Pricing', ru: 'Цены', hy: 'Գներ' },
+        headline: { en: 'Simple credit-based pricing', ru: 'Простые цены на кредиты', hy: 'Պարզ՝ կրեդիտների վրա հիմնված գներ' },
+        sub: {
+          en: '1 credit = 1 studio-quality photo. Buy what you need, no subscription.',
+          ru: '1 кредит = 1 студийное фото. Покупайте сколько нужно, без подписки.',
+          hy: '1 կրեդիտ = 1 ստուդիական լուսանկար։ Գնեք այնքան, որքան պետք է, առանց բաժանորդագրության։'
+        },
+        pack: { en: '/pack', ru: '/пакет', hy: '/փաթեթ' },
+        credits: { en: 'credits', ru: 'кредитов', hy: 'կրեդիտ' },
+        perPhoto: { en: 'per photo', ru: 'за фото', hy: 'մեկ լուսանկարի համար' },
+        bestValue: { en: 'best value', ru: 'выгоднее всего', hy: 'լավագույն արժեք' },
+        popular: { en: 'Popular', ru: 'Популярный', hy: 'Հանրաճանաչ' },
+        choose: { en: 'Choose', ru: 'Выбрать', hy: 'Ընտրել' },
+        free: {
+          en: '3 free credits on signup — enough to test. No credit card required.',
+          ru: '3 бесплатных кредита при регистрации — хватит на тест. Без карты.',
+          hy: '3 անվճար կրեդիտ գրանցման ժամանակ՝ բավական է փորձելու համար։ Քարտ պետք չէ։'
+        }
+      };
+      var F = {
+        photos: { en: '{n} studio photos', ru: '{n} студийных фото', hy: '{n} ստուդիական լուսանկար' },
+        concepts: { en: 'All concepts & styles', ru: 'Все концепты и стили', hy: 'Բոլոր կոնցեպտներն ու ոճերը' },
+        markets: { en: 'All marketplaces', ru: 'Все маркетплейсы', hy: 'Բոլոր մարկետփլեյսները' },
+        fullres: { en: 'Download in full resolution', ru: 'Скачивание в полном разрешении', hy: 'Ներբեռնում լրիվ լուծաչափով' },
+        priority: { en: 'Priority generation', ru: 'Приоритетная генерация', hy: 'Առաջնահերթ գեներացիա' },
+        early: { en: 'Early access to new styles', ru: 'Ранний доступ к новым стилям', hy: 'Վաղ հասանելիություն նոր ոճերին' },
+        support: { en: 'Dedicated support', ru: 'Персональная поддержка', hy: 'Անհատական աջակցություն' }
+      };
+      var TIERS = [
+        { name: 'Starter', price: '$9', credits: 50, unit: '~$0.18', popular: false,
+          tag: { en: 'For trying it out', ru: 'Чтобы попробовать', hy: 'Փորձելու համար' },
+          featKeys: ['concepts', 'markets', 'fullres'] },
+        { name: 'Pro', price: '$29', credits: 200, unit: '~$0.14', popular: true, badge: true, bestValue: true,
+          tag: { en: 'For active sellers', ru: 'Для активных продавцов', hy: 'Ակտիվ վաճառողների համար' },
+          featKeys: ['concepts', 'markets', 'priority', 'fullres'] },
+        { name: 'Studio', price: '$79', credits: 600, unit: '~$0.13', popular: false,
+          tag: { en: 'For high volume', ru: 'Для больших объёмов', hy: 'Մեծ ծավալների համար' },
+          featKeys: ['concepts', 'markets', 'priority', 'early'] },
+        { name: 'Business', price: '$149', credits: 1500, unit: '~$0.10', popular: false,
+          tag: { en: 'For teams & agencies', ru: 'Для команд и агентств', hy: 'Թիմերի և գործակալությունների համար' },
+          featKeys: ['concepts', 'markets', 'priority', 'early', 'support'] }
+      ];
+      var CK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      var CG = '<svg viewBox="0 0 24 24" fill="none" stroke="url(#cg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+      function L(o) { return o ? (o[curLang] || o.en || '') : ''; }
+      function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
+      function setText(sel, t) { var e = document.querySelector(sel); if (e) e.textContent = t; }
+
+      function featRow(text, popular) {
+        var pf = el('div', 'pf');
+        var ci = el('span', 'ci'); ci.innerHTML = popular ? CG : CK;
+        var ct = el('span', 'ct'); ct.textContent = text;
+        pf.appendChild(ci); pf.appendChild(ct);
+        return pf;
+      }
+
+      function render() {
+        setText('[data-px="eyebrow"]', L(PX.eyebrow));
+        setText('[data-px="headline"]', L(PX.headline));
+        setText('[data-px="sub"]', L(PX.sub));
+        setText('[data-px="free"]', L(PX.free));
+        var wrap = document.querySelector('[data-px="cards"]');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        TIERS.forEach(function (t) {
+          var card = el('div', 'pcard ' + (t.popular ? 'popular' : 'plain'));
+          if (t.badge) { var b = el('div', 'badge'); b.textContent = L(PX.popular); card.appendChild(b); }
+          var nm = el('div', 'pname'); nm.textContent = t.name; card.appendChild(nm);
+          var tag = el('div', 'ptag'); tag.textContent = L(t.tag); card.appendChild(tag);
+          var price = el('div', 'price'); price.innerHTML = t.price + ' <span class="per">' + L(PX.pack) + '</span>'; card.appendChild(price);
+          var cr = el('div', 'credits'); cr.textContent = t.credits + ' ' + L(PX.credits); card.appendChild(cr);
+          var unit = el('div', 'unit');
+          unit.innerHTML = t.unit + ' ' + L(PX.perPhoto) + (t.bestValue ? ' · <span class="bv">' + L(PX.bestValue) + '</span>' : '');
+          card.appendChild(unit);
+          card.appendChild(el('div', 'card-div'));
+          var feats = el('div', 'pfeats');
+          feats.appendChild(featRow(L(F.photos).replace('{n}', t.credits), t.popular));
+          t.featKeys.forEach(function (k) { feats.appendChild(featRow(L(F[k]), t.popular)); });
+          card.appendChild(feats);
+          var cta = el('a', 'cta ' + (t.popular ? 'grad' : 'outline'));
+          cta.href = '#start'; cta.textContent = L(PX.choose) + ' ' + t.name;
+          card.appendChild(cta);
+          wrap.appendChild(card);
+        });
+      }
+      pricingRender = render;
+      render();
     })();
   </script>
 
