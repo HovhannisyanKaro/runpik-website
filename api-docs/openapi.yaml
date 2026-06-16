@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Runpik Backend API
-  version: '2026-05-22'
+  version: '2026-06-17'
   description: |
     AI-сервис продуктовой фотографии. Документация описывает client-facing
     API контракт: Edge Functions, PostgREST endpoints для прямого доступа
@@ -1079,18 +1079,37 @@ paths:
       tags: [Admin]
       summary: Список всех камней (superadmin only)
       description: |
-        CRUD каталога камней (`gems`). **Доступ: только `superadmin`** (`requireSuperadmin`). Мутации → `admin_audit_log` (`model.*`). GET возвращает все камни (вкл. неактивные + `generate_engines`/`analyze_engines`).
+        CRUD каталога камней (`gems`). **Доступ: только `superadmin`** (`requireSuperadmin`). Мутации → `admin_audit_log` (`gem.*`). GET возвращает все камни (вкл. неактивные + `generate_engines`/`analyze_engines`). `display_name`/`description` приходят как объекты `{en,ru,hy}` (в отличие от публичного `/gems`, где строка).
       responses:
-        '200': { description: Массив камней }
+        '200':
+          description: 'Все камни (обёртка `{ gems, total }`, НЕ голый массив)'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  gems: { type: array, items: { $ref: '#/components/schemas/Gem' } }
+                  total: { type: integer }
         '401': { description: Нет/невалидный JWT }
         '403': { description: Не superadmin }
     post:
       tags: [Admin]
       summary: Создать камень (superadmin only)
-      description: |
-        Required: `code` (snake_case, unique→409), `gen_content_type_id` (должен существовать). Optional: `display_name`/`description` (jsonb `{en,ru,hy}`), `credit_generate`/`credit_improve`/`credit_analyze` (int≥0), `generate_engines`/`analyze_engines` (`[{engine_id, priority}]` — каждый `engine_id` валидируется), `is_active`, `sort_order`, `is_default` (авто-снимает default с других камней типа).
+      description: 'Required: `code`, `gen_content_type_id`. `is_default=true` авто-снимает default с других камней того же типа. Каждый `engine_id` в списках валидируется на существование.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/GemWritable'
+                - { type: object, required: [code, gen_content_type_id] }
       responses:
-        '201': { description: Камень создан }
+        '201':
+          description: Камень создан
+          content:
+            application/json:
+              schema: { type: object, properties: { gem: { $ref: '#/components/schemas/Gem' } } }
         '400': { description: Bad body / неизвестный engine_id / gen_content_type_id не найден }
         '401': { description: Нет/невалидный JWT }
         '403': { description: Не superadmin }
@@ -1099,13 +1118,23 @@ paths:
     patch:
       tags: [Admin]
       summary: Обновить камень (superadmin only)
+      description: 'Любой subset полей. `is_default=true` авто-снимает default у других камней типа.'
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GemWritable' }
       responses:
-        '200': { description: Обновлено }
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema: { type: object, properties: { gem: { $ref: '#/components/schemas/Gem' } } }
         '400': { description: Bad body / неизвестный engine_id }
         '403': { description: Не superadmin }
         '404': { description: Камень не найден }
@@ -1120,7 +1149,11 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200': { description: Удалено }
+        '200':
+          description: Удалено
+          content:
+            application/json:
+              schema: { type: object, properties: { deleted: { type: boolean }, id: { type: string, format: uuid } } }
         '403': { description: Не superadmin }
         '404': { description: Камень не найден }
 
@@ -1131,29 +1164,58 @@ paths:
       description: |
         CRUD **скрытых** вендорских движков (`ai_engines`). **Доступ: только `superadmin`**. Audit `engine.*`. Ключи вендоров тут НЕ хранятся — `api_key_name` это имя Edge-секрета (`Deno.env`).
       responses:
-        '200': { description: 'Массив движков. Каждый движок аннотирован used_by_gems (int) + referenced_by (массив code камней, ссылающихся на движок в generate_engines/analyze_engines) — для UI "Used by N gems".' }
+        '200':
+          description: 'Массив движков. Каждый движок аннотирован `used_by_gems` (int) + `referenced_by` (коды камней) — для UI "Used by N gems".'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  engines: { type: array, items: { $ref: '#/components/schemas/AiEngine' } }
+                  total: { type: integer }
         '401': { description: Нет/невалидный JWT }
         '403': { description: Не superadmin }
     post:
       tags: [Admin]
       summary: Создать движок (superadmin only)
-      description: |
-        Required: `display_name`, `vendor`, `provider_model`. Optional: `version`, `cost_per_op`, `cost_unit` (`per_image|per_second|per_1k_tokens|per_request`), `token_generate`/`token_improve`/`token_analyze`, `api_key_name`, `valid_until` (`YYYY-MM-DD`), `notes`, `is_active`.
+      description: 'Required: `display_name`, `vendor`, `provider_model`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/AiEngineWritable'
+                - { type: object, required: [display_name, vendor, provider_model] }
       responses:
-        '201': { description: Движок создан }
+        '201':
+          description: Движок создан
+          content:
+            application/json:
+              schema: { type: object, properties: { engine: { $ref: '#/components/schemas/AiEngine' } } }
         '400': { description: Bad body }
         '403': { description: Не superadmin }
   /functions/v1/admin-ai-engines/{id}:
     patch:
       tags: [Admin]
       summary: Обновить движок (superadmin only)
+      description: 'Любой subset полей.'
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AiEngineWritable' }
       responses:
-        '200': { description: Обновлено }
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema: { type: object, properties: { engine: { $ref: '#/components/schemas/AiEngine' } } }
         '400': { description: Bad body }
         '403': { description: Не superadmin }
         '404': { description: Движок не найден }
@@ -1167,10 +1229,18 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200': { description: Удалено }
+        '200':
+          description: Удалено
+          content:
+            application/json:
+              schema: { type: object, properties: { deleted: { type: boolean }, id: { type: string, format: uuid } } }
         '403': { description: Не superadmin }
         '404': { description: Движок не найден }
-        '409': { description: Движок используется камнями }
+        '409':
+          description: Движок используется камнями
+          content:
+            application/json:
+              schema: { type: object, properties: { error: { type: string }, referenced_by: { type: array, items: { type: string } } } }
 
   /functions/v1/admin-shot-types:
     get:
@@ -2564,6 +2634,96 @@ components:
       description: UUID стиля из таблицы `styles`
 
   schemas:
+
+    # ---- AI ecosystem (gems / engines) ----
+
+    LocalizedText:
+      type: object
+      description: 'Локализованный текст {en,ru,hy}. en — основной; ru/hy опц. (fallback на en).'
+      additionalProperties: { type: string }
+      example: { en: "Quartz", ru: "Quartz", hy: "Quartz" }
+
+    EngineRef:
+      type: object
+      description: 'Ссылка камня на движок с приоритетом. priority 1 = основной, 2+ = fallback.'
+      required: [engine_id, priority]
+      properties:
+        engine_id: { type: string, format: uuid }
+        priority: { type: integer, minimum: 1 }
+
+    GemWritable:
+      type: object
+      description: 'Редактируемые поля камня (gems). Для POST обязательны code + gen_content_type_id; для PATCH — любой subset.'
+      properties:
+        code:
+          type: string
+          pattern: '^[a-z][a-z0-9_]*$'
+          description: 'Внутренний код (snake_case), уникален (дубль → 409).'
+          example: quartz
+        display_name: { $ref: '#/components/schemas/LocalizedText' }
+        description: { $ref: '#/components/schemas/LocalizedText' }
+        gen_content_type_id:
+          type: string
+          format: uuid
+          description: 'Тип контента (IMAGE/CARD/VIDEO). Должен существовать.'
+        credit_generate: { type: integer, minimum: 0, description: 'Токены за generate (Quartz=4).' }
+        credit_improve: { type: integer, minimum: 0, description: 'Токены за improve (Quartz=2).' }
+        credit_analyze: { type: integer, minimum: 0, description: 'Токены за analyze (обычно 0).' }
+        generate_engines:
+          type: array
+          items: { $ref: '#/components/schemas/EngineRef' }
+          description: 'Движки для generate (и improve), по приоритету + fallback. Каждый engine_id валидируется.'
+        analyze_engines:
+          type: array
+          items: { $ref: '#/components/schemas/EngineRef' }
+        is_active: { type: boolean }
+        sort_order: { type: integer }
+        is_default: { type: boolean, description: 'true авто-снимает default у других камней того же типа.' }
+
+    Gem:
+      description: 'Камень (полный объект ответа admin). display_name/description — объекты {en,ru,hy}.'
+      allOf:
+        - $ref: '#/components/schemas/GemWritable'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+
+    AiEngineWritable:
+      type: object
+      description: 'Редактируемые поля скрытого движка (ai_engines). Для POST обязательны display_name + vendor + provider_model.'
+      properties:
+        display_name: { type: string, description: 'Внутреннее имя для админки, НЕ переводится.' }
+        vendor: { type: string, example: gemini }
+        provider_model: { type: string, example: gemini-2.5-flash-image }
+        version: { type: string, example: '2.5' }
+        cost_per_op: { type: number, description: 'Себестоимость у вендора, напр. 0.039.' }
+        cost_unit:
+          type: string
+          enum: [per_image, per_second, per_1k_tokens, per_request]
+        token_generate: { type: integer, description: 'Родной токен-хинт движка (подсказка при создании камня).' }
+        token_improve: { type: integer }
+        token_analyze: { type: integer }
+        api_key_name: { type: string, description: 'ИМЯ Edge-секрета (Deno.env), НЕ значение ключа.' }
+        valid_until: { type: string, format: date, description: 'YYYY-MM-DD; UI предупреждает о скором EOL.' }
+        notes: { type: string }
+        is_active: { type: boolean }
+
+    AiEngine:
+      description: 'Движок (полный объект ответа admin). used_by_gems/referenced_by присутствуют только в GET-списке.'
+      allOf:
+        - $ref: '#/components/schemas/AiEngineWritable'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            used_by_gems: { type: integer, description: 'Кол-во РАЗНЫХ камней, ссылающихся на движок (только в GET-списке).' }
+            referenced_by:
+              type: array
+              items: { type: string }
+              description: 'Коды камней, ссылающихся на движок (только в GET-списке).'
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
 
     # ---- Enums ----
 
