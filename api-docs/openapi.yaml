@@ -161,8 +161,8 @@ paths:
       summary: Зарегистрироваться по email и паролю
       description: |
         Создать нового юзера. После успешной регистрации **триггер `handle_new_user`** автоматически:
-        1. Создаёт строку в `public.profiles` с `display_name` из email local-part, `locale = 'en'`
-        2. Выдаёт **3 free credits** через `credits_transactions(amount=+3, reason='signup_bonus')`
+        1. Создаёт строку в `public.profiles` с `display_name` из email local-part, `locale = 'en'`, тариф **Free** (`plan_id`) и `cycle_started_at = now()`
+        2. Выдаёт **10 free tokens** через `credits_transactions(amount=+10, reason='subscription_grant', bucket='subscription')` — норма тарифа Free (`plans.free.credits_monthly`). Кэш `profiles.subscription_credits` обновляет триггер. _(До 2026-06-16 было +3 `signup_bonus`.)_
         3. Создаёт **default project** в `public.projects` с именем = сегодняшняя UTC дата (`YYYY-MM-DD`)
 
         Email confirmation выключен в MVP — сессия активна сразу после signup, не нужно ждать письмо.
@@ -2600,6 +2600,32 @@ components:
           format: date-time
           nullable: true
           description: 'NULL = активный. Set через RPC `schedule_my_account_deletion()`. Через 7 дней cron удалит юзера.'
+        subscription_credits:
+          type: integer
+          description: 'Баланс подписочного кошелька токенов. Сбрасывается каждый месячный цикл (не накапливается). Кэш SUM леджера по bucket=subscription. _(2026-06-16)_'
+        topup_credits:
+          type: integer
+          description: 'Баланс купленного кошелька токенов (вечный, v1.1). Кэш SUM по bucket=topup. Списание тратит сначала subscription, потом topup. _(2026-06-16)_'
+        plan_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 'FK на текущий тариф (`plans`). На signup = Free. _(2026-06-16)_'
+        entitlement_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: 'Когда заканчивается платный entitlement (NULL = free/без срока). _(2026-06-16)_'
+        cycle_started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 'Начало текущего месячного цикла токенов. _(2026-06-16)_'
+        payment_source:
+          type: string
+          enum: [apple, google, web]
+          nullable: true
+          description: 'Источник оплаты подписки. _(2026-06-16)_'
         created_at:
           type: string
           format: date-time
