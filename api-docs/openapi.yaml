@@ -1131,7 +1131,7 @@ paths:
       description: |
         CRUD **скрытых** вендорских движков (`ai_engines`). **Доступ: только `superadmin`**. Audit `engine.*`. Ключи вендоров тут НЕ хранятся — `api_key_name` это имя Edge-секрета (`Deno.env`).
       responses:
-        '200': { description: Массив движков }
+        '200': { description: 'Массив движков. Каждый движок аннотирован used_by_gems (int) + referenced_by (массив code камней, ссылающихся на движок в generate_engines/analyze_engines) — для UI "Used by N gems".' }
         '401': { description: Нет/невалидный JWT }
         '403': { description: Не superadmin }
     post:
