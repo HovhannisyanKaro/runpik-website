@@ -162,7 +162,7 @@ paths:
       description: |
         Создать нового юзера. После успешной регистрации **триггер `handle_new_user`** автоматически:
         1. Создаёт строку в `public.profiles` с `display_name` из email local-part, `locale = 'en'`, тариф **Free** (`plan_id`) и `cycle_started_at = now()`
-        2. Выдаёт **10 free tokens** через `credits_transactions(amount=+10, reason='subscription_grant', bucket='subscription')` — норма тарифа Free (`plans.free.credits_monthly`). Кэш `profiles.subscription_credits` обновляет триггер. _(До 2026-06-16 было +3 `signup_bonus`.)_
+        2. Выдаёт **10 free tokens** через `credits_transactions(amount=+10, reason='subscription_grant', bucket='subscription')` — норма тарифа Free (`subscription_plans.free.credits_monthly`). Кэш `profiles.subscription_credits` обновляет триггер. _(До 2026-06-16 было +3 `signup_bonus`.)_
         3. Создаёт **default project** в `public.projects` с именем = сегодняшняя UTC дата (`YYYY-MM-DD`)
 
         Email confirmation выключен в MVP — сессия активна сразу после signup, не нужно ждать письмо.
@@ -608,7 +608,7 @@ paths:
       tags: [AI Pipeline]
       summary: Улучшить генерацию (новая версия)
       description: |
-        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. **Биллинг (с 2026-06-16):** списывается `credit_improve` камня в токенах (Quartz = 2) через `spend_credits` **по факту успеха**; камень наследуется от исходной версии (`source.runpik_model_id`, fallback — дефолтный IMAGE). При сбое строка версии удаляется, токены не списываются.
+        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. **Биллинг (с 2026-06-16):** списывается `credit_improve` камня в токенах (Quartz = 2) через `spend_credits` **по факту успеха**; камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный IMAGE). При сбое строка версии удаляется, токены не списываются.
 
         Каждая версия — обычная строка `generations`: `root_generation_id` (группа), `version_index` (0=оригинал, 1=V1…), `improvement_prompt`, `source_generation_id` (откуда улучшали). MVP **linear**: новая версия = `max(version_index)+1`.
 
@@ -810,9 +810,9 @@ paths:
       tags: [AI Pipeline]
       summary: Stage 2 — генерация изображения
       description: |
-        **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/analyze`, строит Stage 2 prompt, прогоняет через движки выбранного **камня** (`runpik_models`) с priority+retry+fallback, загружает output в `outputs` bucket, возвращает signed URL.
+        **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/analyze`, строит Stage 2 prompt, прогоняет через движки выбранного **камня** (`gems`) с priority+retry+fallback, загружает output в `outputs` bucket, возвращает signed URL.
 
-        **Биллинг (с 2026-06-16):** списывается `credit_generate` камня в **токенах** (дефолтный камень Quartz = **4**), а не фикс-1. Камень — поле `runpik_model_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации токены НЕ списываются** (refund не нужен — списания просто нет).
+        **Биллинг (с 2026-06-16):** списывается `credit_generate` камня в **токенах** (дефолтный камень Quartz = **4**), а не фикс-1. Камень — поле `gem_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации токены НЕ списываются** (refund не нужен — списания просто нет).
 
         **Длительная операция:** 8 сек в mock mode, 10-30 сек реальный Gemini. Показывай loading state с прогрессом.
 
@@ -862,11 +862,11 @@ paths:
                   nullable: true
                   description: |
                     Имя товара (заголовок фото), зафиксированное на Create — обычно отредактированное `analysis.product.product_name` из `/analyze`. Optional. Санитизируется (strip control chars, trim, cap 60). Пустое/отсутствует → null (фронт показывает fallback). Пишется в `generations.product_name`. **Photo-level:** Improve-версии наследуют, переименование позже синхронится по всей группе версий (PATCH `/rest/v1/generations`). В Stage 2 НЕ уходит. (2026-06-07)
-                runpik_model_id:
+                gem_id:
                   type: string
                   format: uuid
                   description: |
-                    Какой «камень» (`runpik_models`) использовать. Optional — NULL → дефолтный камень для IMAGE. Должен быть UUID активного камня. Цена генерации = `credit_generate` камня (Quartz = 4 токена). Пишется в `generations.runpik_model_id`; реально отработавший движок — в `generations.engine_id`. (2026-06-16)
+                    Какой «камень» (`gems`) использовать. Optional — NULL → дефолтный камень для IMAGE. Должен быть UUID активного камня. Цена генерации = `credit_generate` камня (Quartz = 4 токена). Пишется в `generations.gem_id`; реально отработавший движок — в `generations.engine_id`. (2026-06-16)
       responses:
         '200':
           description: 'Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.'
@@ -1074,12 +1074,12 @@ paths:
                     type: boolean
                     description: '`true` если `?locale=` был unsupported → fallback на `en`'
 
-  /functions/v1/admin-models:
+  /functions/v1/admin-gems:
     get:
       tags: [Admin]
       summary: Список всех камней (superadmin only)
       description: |
-        CRUD каталога камней (`runpik_models`). **Доступ: только `superadmin`** (`requireSuperadmin`). Мутации → `admin_audit_log` (`model.*`). GET возвращает все камни (вкл. неактивные + `generate_engines`/`analyze_engines`).
+        CRUD каталога камней (`gems`). **Доступ: только `superadmin`** (`requireSuperadmin`). Мутации → `admin_audit_log` (`model.*`). GET возвращает все камни (вкл. неактивные + `generate_engines`/`analyze_engines`).
       responses:
         '200': { description: Массив камней }
         '401': { description: Нет/невалидный JWT }
@@ -1095,7 +1095,7 @@ paths:
         '401': { description: Нет/невалидный JWT }
         '403': { description: Не superadmin }
         '409': { description: Дубль code }
-  /functions/v1/admin-models/{id}:
+  /functions/v1/admin-gems/{id}:
     patch:
       tags: [Admin]
       summary: Обновить камень (superadmin only)
@@ -1113,7 +1113,7 @@ paths:
     delete:
       tags: [Admin]
       summary: Удалить камень (superadmin only)
-      description: 'FK `generations.runpik_model_id` = ON DELETE SET NULL — исторические генерации выживают.'
+      description: 'FK `generations.gem_id` = ON DELETE SET NULL — исторические генерации выживают.'
       parameters:
         - in: path
           name: id
@@ -1124,12 +1124,12 @@ paths:
         '403': { description: Не superadmin }
         '404': { description: Камень не найден }
 
-  /functions/v1/admin-engines:
+  /functions/v1/admin-ai-engines:
     get:
       tags: [Admin]
       summary: Список всех движков (superadmin only)
       description: |
-        CRUD **скрытых** вендорских движков (`engines`). **Доступ: только `superadmin`**. Audit `engine.*`. Ключи вендоров тут НЕ хранятся — `api_key_name` это имя Edge-секрета (`Deno.env`).
+        CRUD **скрытых** вендорских движков (`ai_engines`). **Доступ: только `superadmin`**. Audit `engine.*`. Ключи вендоров тут НЕ хранятся — `api_key_name` это имя Edge-секрета (`Deno.env`).
       responses:
         '200': { description: Массив движков }
         '401': { description: Нет/невалидный JWT }
@@ -1143,7 +1143,7 @@ paths:
         '201': { description: Движок создан }
         '400': { description: Bad body }
         '403': { description: Не superadmin }
-  /functions/v1/admin-engines/{id}:
+  /functions/v1/admin-ai-engines/{id}:
     patch:
       tags: [Admin]
       summary: Обновить движок (superadmin only)
@@ -1353,18 +1353,18 @@ paths:
   # INSPIRE / STYLES
   # ============================================================
 
-  /functions/v1/models:
+  /functions/v1/gems:
     get:
       tags: [AI Pipeline]
       summary: Каталог моделей-«камней» (public, i18n)
       description: |
-        Публичный read-only каталог наших брендовых AI-моделей («камней», `runpik_models`) для экрана выбора модели. Юзер видит камни Runpik (Quartz, …) — **никогда вендорские движки**.
+        Публичный read-only каталог наших брендовых AI-моделей («камней», `gems`) для экрана выбора модели. Юзер видит камни Runpik (Quartz, …) — **никогда вендорские движки**.
 
         **No auth required** — `verify_jwt = false`. Cache `public, max-age=300` (5 min edge CDN).
 
         **`generate_engines` / `analyze_engines` НИКОГДА не возвращаются** (внутреннее, как `style_prompt`). Возвращаются только активные камни активных типов (CARD/VIDEO выключены). Цена операции = `credit_*` камня в токенах.
 
-        **Frontend:** фильтруй `models` по `content_type` (сейчас `IMAGE`), предвыбирай `is_default`, при генерации передавай `models[i].id` как `runpik_model_id` в `/generate`.
+        **Frontend:** фильтруй `models` по `content_type` (сейчас `IMAGE`), предвыбирай `is_default`, при генерации передавай `models[i].id` как `gem_id` в `/generate`.
       security: []
       parameters:
         - in: query
@@ -1387,7 +1387,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  models:
+                  gems:
                     type: array
                     items:
                       type: object
@@ -2774,7 +2774,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: 'FK на текущий тариф (`plans`). На signup = Free. _(2026-06-16)_'
+          description: 'FK на текущий тариф (`subscription_plans`). На signup = Free. _(2026-06-16)_'
         entitlement_until:
           type: string
           format: date-time
@@ -2852,11 +2852,11 @@ components:
           type: string
           format: uuid
           description: 'FK на `analyses.id`. Set null при удалении analysis.'
-        runpik_model_id:
+        gem_id:
           type: string
           format: uuid
           nullable: true
-          description: 'Камень (`runpik_models`), выбранный для генерации. ON DELETE SET NULL. NULL у legacy-строк. (2026-06-16)'
+          description: 'Камень (`gems`), выбранный для генерации. ON DELETE SET NULL. NULL у legacy-строк. (2026-06-16)'
         engine_id:
           type: string
           format: uuid
