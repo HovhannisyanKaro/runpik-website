@@ -1255,6 +1255,67 @@ paths:
   # INSPIRE / STYLES
   # ============================================================
 
+  /functions/v1/models:
+    get:
+      tags: [AI Pipeline]
+      summary: Каталог моделей-«камней» (public, i18n)
+      description: |
+        Публичный read-only каталог наших брендовых AI-моделей («камней», `runpik_models`) для экрана выбора модели. Юзер видит камни Runpik (Quartz, …) — **никогда вендорские движки**.
+
+        **No auth required** — `verify_jwt = false`. Cache `public, max-age=300` (5 min edge CDN).
+
+        **`generate_engines` / `analyze_engines` НИКОГДА не возвращаются** (внутреннее, как `style_prompt`). Возвращаются только активные камни активных типов (CARD/VIDEO выключены). Цена операции = `credit_*` камня в токенах.
+
+        **Frontend:** фильтруй `models` по `content_type` (сейчас `IMAGE`), предвыбирай `is_default`, при генерации передавай `models[i].id` как `runpik_model_id` в `/generate`.
+      security: []
+      parameters:
+        - in: query
+          name: locale
+          schema:
+            type: string
+            enum: [en, ru]
+            default: en
+          description: 'Локаль для `display_name` + `description`. Unsupported (вкл. hy) → fallback на `en` с `fallback_used: true`.'
+      responses:
+        '200':
+          description: Каталог активных камней
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=300
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        code: { type: string, example: quartz }
+                        display_name: { type: string, example: Quartz }
+                        description: { type: string }
+                        content_type: { type: string, example: IMAGE }
+                        credit_generate: { type: integer, example: 4 }
+                        credit_improve: { type: integer, example: 2 }
+                        credit_analyze: { type: integer, example: 0 }
+                        is_default: { type: boolean }
+                        sort_order: { type: integer }
+                  content_types:
+                    type: object
+                    additionalProperties: { type: string }
+                    description: 'Локализованные label'' типов, у которых есть ≥1 камень. Напр. `{ "IMAGE": "Image" }`.'
+                  locale: { type: string }
+                  fallback_used: { type: boolean }
+                  total: { type: integer }
+        '405':
+          description: метод != GET/OPTIONS
+        '500':
+          description: missing env vars / DB error
+
   /functions/v1/styles:
     get:
       tags: [Inspire]
