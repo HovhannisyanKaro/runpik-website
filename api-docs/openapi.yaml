@@ -69,7 +69,7 @@ tags:
   - name: Projects
     description: Управление проектами (workspace-like группировка). У юзера всегда минимум 1 project. CRUD через PostgREST, delete — через Edge Function (для blob cleanup).
   - name: AI Pipeline
-    description: Двухстадийный AI flow — анализ фото (Stage 1, бесплатно) + генерация изображения (Stage 2, 1 кредит). Plus каталог типов кадров для UI.
+    description: Двухстадийный AI flow — анализ фото (Stage 1, бесплатно) + генерация изображения (Stage 2, токены камня — Quartz=4). Plus каталог типов кадров для UI.
   - name: Admin
     description: Backend admin endpoints — **только для пользователей с ролью superadmin**. 11 read-only routes для inspection runtime config, prompts, audit log, etc. Regular users → 403.
   - name: Inspire
@@ -608,13 +608,13 @@ paths:
       tags: [AI Pipeline]
       summary: Улучшить генерацию (новая версия)
       description: |
-        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. Списывает **1 кредит**, refund при сбое.
+        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. **Биллинг (с 2026-06-16):** списывается `credit_improve` камня в токенах (Quartz = 2) через `spend_credits` **по факту успеха**; камень наследуется от исходной версии (`source.runpik_model_id`, fallback — дефолтный IMAGE). При сбое строка версии удаляется, токены не списываются.
 
         Каждая версия — обычная строка `generations`: `root_generation_id` (группа), `version_index` (0=оригинал, 1=V1…), `improvement_prompt`, `source_generation_id` (откуда улучшали). MVP **linear**: новая версия = `max(version_index)+1`.
 
         **Gemini:** вариант A (image-to-image) — output предыдущей версии как reference + improvement-текст. Идентичность продукта подкрепляется из оригинального анализа.
 
-        **Soft-лимит:** `MAX_VERSIONS_PER_GENERATION = 5` (config, не schema). **Failed improvement** → строка версии удаляется + refund (не остаётся `failed` в списке).
+        **Soft-лимит:** `MAX_VERSIONS_PER_GENERATION = 5` (config, не schema). **Failed improvement** → строка версии удаляется, токены не списываются (charge-on-success; не остаётся `failed` в списке).
 
         **List версий:** `GET /rest/v1/generations?root_generation_id=eq.{root}&order=version_index.asc`. **Move-to-project** двигает всю группу (триггер; split запрещён).
 
@@ -695,7 +695,7 @@ paths:
         '409':
           description: 'Лимит версий (`code: VERSION_LIMIT_REACHED`) или source не готов (`code: SOURCE_NOT_READY`)'
         '502':
-          description: 'Gemini сбой (`code: GEMINI_FAILURE`). Строка версии удалена, кредит возвращён (refund).'
+          description: 'Image generation сбой (`code: GEMINI_FAILURE`, все движки камня после retry+fallback). Строка версии удалена, токены НЕ списаны (charge-on-success).'
 
   /rest/v1/generations:
     patch:
