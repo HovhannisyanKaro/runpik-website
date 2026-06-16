@@ -810,12 +810,9 @@ paths:
       tags: [AI Pipeline]
       summary: Stage 2 — генерация изображения
       description: |
-        **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/analyze`, строит Stage 2 prompt, вызывает Gemini Flash Image, загружает output в `outputs` bucket, возвращает signed URL.
+        **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/analyze`, строит Stage 2 prompt, прогоняет через движки выбранного **камня** (`runpik_models`) с priority+retry+fallback, загружает output в `outputs` bucket, возвращает signed URL.
 
-        **Списывает 1 кредит** через append-only ledger `credits_transactions`. Refund (отдельная запись `+1`) при определённых сбоях:
-        - 400 prompt build error (shot_type не существует в категории)
-        - 500 Storage upload fail
-        - 502 Gemini Image non-2xx или пустой ответ
+        **Биллинг (с 2026-06-16):** списывается `credit_generate` камня в **токенах** (дефолтный камень Quartz = **4**), а не фикс-1. Камень — поле `runpik_model_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации токены НЕ списываются** (refund не нужен — списания просто нет).
 
         **Длительная операция:** 8 сек в mock mode, 10-30 сек реальный Gemini. Показывай loading state с прогрессом.
 
@@ -865,6 +862,11 @@ paths:
                   nullable: true
                   description: |
                     Имя товара (заголовок фото), зафиксированное на Create — обычно отредактированное `analysis.product.product_name` из `/analyze`. Optional. Санитизируется (strip control chars, trim, cap 60). Пустое/отсутствует → null (фронт показывает fallback). Пишется в `generations.product_name`. **Photo-level:** Improve-версии наследуют, переименование позже синхронится по всей группе версий (PATCH `/rest/v1/generations`). В Stage 2 НЕ уходит. (2026-06-07)
+                runpik_model_id:
+                  type: string
+                  format: uuid
+                  description: |
+                    Какой «камень» (`runpik_models`) использовать. Optional — NULL → дефолтный камень для IMAGE. Должен быть UUID активного камня. Цена генерации = `credit_generate` камня (Quartz = 4 токена). Пишется в `generations.runpik_model_id`; реально отработавший движок — в `generations.engine_id`. (2026-06-16)
       responses:
         '200':
           description: 'Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.'
@@ -875,7 +877,7 @@ paths:
         '400':
           description: 'Malformed JSON / missing analysis_id / invalid lighting или aspect_ratio slug / `style_id` не UUID / стиль не найден или не опубликован / категория продукта в `excluded_categories` стиля'
         '402':
-          description: Недостаточно кредитов (`balance < 1`)
+          description: Недостаточно токенов (`balance < стоимости камня`, Quartz = 4)
           content:
             application/json:
               schema:
@@ -887,12 +889,15 @@ paths:
                   balance:
                     type: integer
                     example: 0
+                  required:
+                    type: integer
+                    example: 4
         '403':
           description: '`analyses.user_id !== auth.uid()` — анализ не твой'
         '404':
           description: '`analysis_id` не найден или input image удалён между /analyze и /generate'
         '422':
-          description: 'Verdict recheck failed — `analysis.is_suitable.verdict = false`. **Кредит НЕ списан.**'
+          description: 'Verdict recheck failed — `analysis.is_suitable.verdict = false`. **Токены НЕ списаны.**'
           content:
             application/json:
               schema:
@@ -908,9 +913,9 @@ paths:
                     type: string
                     format: uuid
         '500':
-          description: 'DB error / Storage upload fail (refund issued) / Signed URL fail (NO refund — generation уже done)'
+          description: 'DB error / Storage upload fail (токены не списаны) / Signed URL fail (генерация done + токены уже списаны, refund нет)'
         '502':
-          description: 'Gemini Image non-2xx или ответ без inline data. **Refund issued.**'
+          description: 'Image generation fail — все движки камня упали (non-2xx / без inline data) после retry+fallback. **Токены НЕ списаны** (charge-on-success).'
 
   /functions/v1/preview-prompt:
     post:
@@ -2688,6 +2693,16 @@ components:
           type: string
           format: uuid
           description: 'FK на `analyses.id`. Set null при удалении analysis.'
+        runpik_model_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 'Камень (`runpik_models`), выбранный для генерации. ON DELETE SET NULL. NULL у legacy-строк. (2026-06-16)'
+        engine_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 'Реально отработавший движок (после priority/fallback). ON DELETE SET NULL. NULL в mock / legacy. (2026-06-16)'
         shot_type:
           type: string
         user_text:
@@ -2721,7 +2736,7 @@ components:
           description: 'Заполняется при `status=failed`. Для Gemini ошибок — содержит первые 500 байт response body.'
         credits_charged:
           type: integer
-          default: 1
+          description: 'Списанные токены = `credit_generate` камня (Quartz = 4). До 2026-06-16 всегда 1.'
         created_at:
           type: string
           format: date-time
