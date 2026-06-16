@@ -1074,6 +1074,104 @@ paths:
                     type: boolean
                     description: '`true` если `?locale=` был unsupported → fallback на `en`'
 
+  /functions/v1/admin-models:
+    get:
+      tags: [Admin]
+      summary: Список всех камней (superadmin only)
+      description: |
+        CRUD каталога камней (`runpik_models`). **Доступ: только `superadmin`** (`requireSuperadmin`). Мутации → `admin_audit_log` (`model.*`). GET возвращает все камни (вкл. неактивные + `generate_engines`/`analyze_engines`).
+      responses:
+        '200': { description: Массив камней }
+        '401': { description: Нет/невалидный JWT }
+        '403': { description: Не superadmin }
+    post:
+      tags: [Admin]
+      summary: Создать камень (superadmin only)
+      description: |
+        Required: `code` (snake_case, unique→409), `gen_content_type_id` (должен существовать). Optional: `display_name`/`description` (jsonb `{en,ru,hy}`), `credit_generate`/`credit_improve`/`credit_analyze` (int≥0), `generate_engines`/`analyze_engines` (`[{engine_id, priority}]` — каждый `engine_id` валидируется), `is_active`, `sort_order`, `is_default` (авто-снимает default с других камней типа).
+      responses:
+        '201': { description: Камень создан }
+        '400': { description: Bad body / неизвестный engine_id / gen_content_type_id не найден }
+        '401': { description: Нет/невалидный JWT }
+        '403': { description: Не superadmin }
+        '409': { description: Дубль code }
+  /functions/v1/admin-models/{id}:
+    patch:
+      tags: [Admin]
+      summary: Обновить камень (superadmin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Обновлено }
+        '400': { description: Bad body / неизвестный engine_id }
+        '403': { description: Не superadmin }
+        '404': { description: Камень не найден }
+        '409': { description: Дубль code }
+    delete:
+      tags: [Admin]
+      summary: Удалить камень (superadmin only)
+      description: 'FK `generations.runpik_model_id` = ON DELETE SET NULL — исторические генерации выживают.'
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Удалено }
+        '403': { description: Не superadmin }
+        '404': { description: Камень не найден }
+
+  /functions/v1/admin-engines:
+    get:
+      tags: [Admin]
+      summary: Список всех движков (superadmin only)
+      description: |
+        CRUD **скрытых** вендорских движков (`engines`). **Доступ: только `superadmin`**. Audit `engine.*`. Ключи вендоров тут НЕ хранятся — `api_key_name` это имя Edge-секрета (`Deno.env`).
+      responses:
+        '200': { description: Массив движков }
+        '401': { description: Нет/невалидный JWT }
+        '403': { description: Не superadmin }
+    post:
+      tags: [Admin]
+      summary: Создать движок (superadmin only)
+      description: |
+        Required: `display_name`, `vendor`, `provider_model`. Optional: `version`, `cost_per_op`, `cost_unit` (`per_image|per_second|per_1k_tokens|per_request`), `token_generate`/`token_improve`/`token_analyze`, `api_key_name`, `valid_until` (`YYYY-MM-DD`), `notes`, `is_active`.
+      responses:
+        '201': { description: Движок создан }
+        '400': { description: Bad body }
+        '403': { description: Не superadmin }
+  /functions/v1/admin-engines/{id}:
+    patch:
+      tags: [Admin]
+      summary: Обновить движок (superadmin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Обновлено }
+        '400': { description: Bad body }
+        '403': { description: Не superadmin }
+        '404': { description: Движок не найден }
+    delete:
+      tags: [Admin]
+      summary: Удалить движок (superadmin only)
+      description: 'Блокируется **409** если на движок ссылается камень (`referenced_by: [code,…]`) — сначала отвяжи. Историч. `generations.engine_id` = SET NULL.'
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Удалено }
+        '403': { description: Не superadmin }
+        '404': { description: Движок не найден }
+        '409': { description: Движок используется камнями }
+
   /functions/v1/admin-shot-types:
     get:
       tags: [Admin]
