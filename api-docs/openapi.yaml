@@ -69,7 +69,7 @@ tags:
   - name: Projects
     description: Управление проектами (workspace-like группировка). У юзера всегда минимум 1 project. CRUD через PostgREST, delete — через Edge Function (для blob cleanup).
   - name: AI Pipeline
-    description: Двухстадийный AI flow — анализ фото (Stage 1, бесплатно) + генерация изображения (Stage 2, токены камня — Quartz=4). Plus каталог типов кадров для UI.
+    description: Двухстадийный AI flow — анализ фото (Stage 1, бесплатно) + генерация изображения (Stage 2, кредиты камня — Quartz=4). Plus каталог типов кадров для UI.
   - name: Admin
     description: Backend admin endpoints — **только для пользователей с ролью superadmin**. 11 read-only routes для inspection runtime config, prompts, audit log, etc. Regular users → 403.
   - name: Inspire
@@ -162,7 +162,7 @@ paths:
       description: |
         Создать нового юзера. После успешной регистрации **триггер `handle_new_user`** автоматически:
         1. Создаёт строку в `public.profiles` с `display_name` из email local-part, `locale = 'en'`, тариф **Free** (`plan_id`) и `cycle_started_at = now()`
-        2. Выдаёт **10 free tokens** через `credits_transactions(amount=+10, reason='subscription_grant', bucket='subscription')` — норма тарифа Free (`subscription_plans.free.credits_monthly`). Кэш `profiles.subscription_credits` обновляет триггер. _(До 2026-06-16 было +3 `signup_bonus`.)_
+        2. Выдаёт **10 free credits** через `credits_transactions(amount=+10, reason='subscription_grant', bucket='subscription')` — норма тарифа Free (`subscription_plans.free.credits_monthly`). Кэш `profiles.subscription_credits` обновляет триггер. _(До 2026-06-16 было +3 `signup_bonus`.)_
         3. Создаёт **default project** в `public.projects` с именем = сегодняшняя UTC дата (`YYYY-MM-DD`)
 
         Email confirmation выключен в MVP — сессия активна сразу после signup, не нужно ждать письмо.
@@ -608,13 +608,13 @@ paths:
       tags: [AI Pipeline]
       summary: Улучшить генерацию (новая версия)
       description: |
-        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. **Биллинг (с 2026-06-16):** списывается `credit_improve` камня в токенах (Quartz = 2) через `spend_credits` **по факту успеха**; камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный IMAGE). При сбое строка версии удаляется, токены не списываются.
+        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. **Биллинг (с 2026-06-16):** списывается `credit_improve` камня в кредитах (Quartz = 2) через `spend_credits` **по факту успеха**; камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный IMAGE). При сбое строка версии удаляется, кредиты не списываются.
 
         Каждая версия — обычная строка `generations`: `root_generation_id` (группа), `version_index` (0=оригинал, 1=V1…), `improvement_prompt`, `source_generation_id` (откуда улучшали). MVP **linear**: новая версия = `max(version_index)+1`.
 
         **Gemini:** вариант A (image-to-image) — output предыдущей версии как reference + improvement-текст. Идентичность продукта подкрепляется из оригинального анализа.
 
-        **Soft-лимит:** `MAX_VERSIONS_PER_GENERATION = 5` (config, не schema). **Failed improvement** → строка версии удаляется, токены не списываются (charge-on-success; не остаётся `failed` в списке).
+        **Soft-лимит:** `MAX_VERSIONS_PER_GENERATION = 5` (config, не schema). **Failed improvement** → строка версии удаляется, кредиты не списываются (charge-on-success; не остаётся `failed` в списке).
 
         **List версий:** `GET /rest/v1/generations?root_generation_id=eq.{root}&order=version_index.asc`. **Move-to-project** двигает всю группу (триггер; split запрещён).
 
@@ -695,7 +695,7 @@ paths:
         '409':
           description: 'Лимит версий (`code: VERSION_LIMIT_REACHED`) или source не готов (`code: SOURCE_NOT_READY`)'
         '502':
-          description: 'Image generation сбой (`code: GEMINI_FAILURE`, все движки камня после retry+fallback). Строка версии удалена, токены НЕ списаны (charge-on-success).'
+          description: 'Image generation сбой (`code: GEMINI_FAILURE`, все движки камня после retry+fallback). Строка версии удалена, кредиты НЕ списаны (charge-on-success).'
 
   /rest/v1/generations:
     patch:
@@ -812,7 +812,7 @@ paths:
       description: |
         **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/analyze`, строит Stage 2 prompt, прогоняет через движки выбранного **камня** (`gems`) с priority+retry+fallback, загружает output в `outputs` bucket, возвращает signed URL.
 
-        **Биллинг (с 2026-06-16):** списывается `credit_generate` камня в **токенах** (дефолтный камень Quartz = **4**), а не фикс-1. Камень — поле `gem_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации токены НЕ списываются** (refund не нужен — списания просто нет).
+        **Биллинг (с 2026-06-16):** списывается `credit_generate` камня в **кредитах** (дефолтный камень Quartz = **4**), а не фикс-1. Камень — поле `gem_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации кредиты НЕ списываются** (refund не нужен — списания просто нет).
 
         **Длительная операция:** 8 сек в mock mode, 10-30 сек реальный Gemini. Показывай loading state с прогрессом.
 
@@ -866,7 +866,7 @@ paths:
                   type: string
                   format: uuid
                   description: |
-                    Какой «камень» (`gems`) использовать. Optional — NULL → дефолтный камень для IMAGE. Должен быть UUID активного камня. Цена генерации = `credit_generate` камня (Quartz = 4 токена). Пишется в `generations.gem_id`; реально отработавший движок — в `generations.engine_id`. (2026-06-16)
+                    Какой «камень» (`gems`) использовать. Optional — NULL → дефолтный камень для IMAGE. Должен быть UUID активного камня. Цена генерации = `credit_generate` камня (Quartz = 4 кредита). Пишется в `generations.gem_id`; реально отработавший движок — в `generations.engine_id`. (2026-06-16)
       responses:
         '200':
           description: 'Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.'
@@ -877,7 +877,7 @@ paths:
         '400':
           description: 'Malformed JSON / missing analysis_id / invalid lighting или aspect_ratio slug / `style_id` не UUID / стиль не найден или не опубликован / категория продукта в `excluded_categories` стиля'
         '402':
-          description: Недостаточно токенов (`balance < стоимости камня`, Quartz = 4)
+          description: Недостаточно кредитов (`balance < стоимости камня`, Quartz = 4)
           content:
             application/json:
               schema:
@@ -897,7 +897,7 @@ paths:
         '404':
           description: '`analysis_id` не найден или input image удалён между /analyze и /generate'
         '422':
-          description: 'Verdict recheck failed — `analysis.is_suitable.verdict = false`. **Токены НЕ списаны.**'
+          description: 'Verdict recheck failed — `analysis.is_suitable.verdict = false`. **Кредиты НЕ списаны.**'
           content:
             application/json:
               schema:
@@ -913,9 +913,9 @@ paths:
                     type: string
                     format: uuid
         '500':
-          description: 'DB error / Storage upload fail (токены не списаны) / Signed URL fail (генерация done + токены уже списаны, refund нет)'
+          description: 'DB error / Storage upload fail (кредиты не списаны) / Signed URL fail (генерация done + кредиты уже списаны, refund нет)'
         '502':
-          description: 'Image generation fail — все движки камня упали (non-2xx / без inline data) после retry+fallback. **Токены НЕ списаны** (charge-on-success).'
+          description: 'Image generation fail — все движки камня упали (non-2xx / без inline data) после retry+fallback. **Кредиты НЕ списаны** (charge-on-success).'
 
   /functions/v1/preview-prompt:
     post:
@@ -1432,7 +1432,7 @@ paths:
 
         **No auth required** — `verify_jwt = false`. Cache `public, max-age=300` (5 min edge CDN).
 
-        **`generate_engines` / `analyze_engines` НИКОГДА не возвращаются** (внутреннее, как `style_prompt`). Возвращаются только активные камни активных типов (CARD/VIDEO выключены). Цена операции = `credit_*` камня в токенах.
+        **`generate_engines` / `analyze_engines` НИКОГДА не возвращаются** (внутреннее, как `style_prompt`). Возвращаются только активные камни активных типов (CARD/VIDEO выключены). Цена операции = `credit_*` камня в кредитах.
 
         **Frontend:** фильтруй `models` по `content_type` (сейчас `IMAGE`), предвыбирай `is_default`, при генерации передавай `models[i].id` как `gem_id` в `/generate`.
       security: []
@@ -1862,7 +1862,7 @@ paths:
     get:
       tags: [Admin]
       summary: Stage 2 template + model
-      description: 'Returns `STAGE_2_TEMPLATE` raw template с `{placeholder}` токенами. Toxens fill at runtime per (category, shot_type, lighting, user_text) — см. `generate/prompt-builder.ts` assembly logic.'
+      description: 'Returns `STAGE_2_TEMPLATE` raw template с `{placeholder}` токенами. Tokens fill at runtime per (category, shot_type, lighting, user_text) — см. `generate/prompt-builder.ts` assembly logic.'
       responses:
         '200':
           description: OK
@@ -2666,9 +2666,9 @@ components:
           type: string
           format: uuid
           description: 'Тип контента (IMAGE/CARD/VIDEO). Должен существовать.'
-        credit_generate: { type: integer, minimum: 0, description: 'Токены за generate (Quartz=4).' }
-        credit_improve: { type: integer, minimum: 0, description: 'Токены за improve (Quartz=2).' }
-        credit_analyze: { type: integer, minimum: 0, description: 'Токены за analyze (обычно 0).' }
+        credit_generate: { type: integer, minimum: 0, description: 'Кредиты за generate (Quartz=4).' }
+        credit_improve: { type: integer, minimum: 0, description: 'Кредиты за improve (Quartz=2).' }
+        credit_analyze: { type: integer, minimum: 0, description: 'Кредиты за analyze (обычно 0).' }
         generate_engines:
           type: array
           items: { $ref: '#/components/schemas/EngineRef' }
@@ -2926,10 +2926,10 @@ components:
           description: 'NULL = активный. Set через RPC `schedule_my_account_deletion()`. Через 7 дней cron удалит юзера.'
         subscription_credits:
           type: integer
-          description: 'Баланс подписочного кошелька токенов. Сбрасывается каждый месячный цикл (не накапливается). Кэш SUM леджера по bucket=subscription. _(2026-06-16)_'
+          description: 'Баланс подписочного кошелька кредитов. Сбрасывается каждый месячный цикл (не накапливается). Кэш SUM леджера по bucket=subscription. _(2026-06-16)_'
         topup_credits:
           type: integer
-          description: 'Баланс купленного кошелька токенов (вечный, v1.1). Кэш SUM по bucket=topup. Списание тратит сначала subscription, потом topup. _(2026-06-16)_'
+          description: 'Баланс купленного кошелька кредитов (вечный, v1.1). Кэш SUM по bucket=topup. Списание тратит сначала subscription, потом topup. _(2026-06-16)_'
         plan_id:
           type: string
           format: uuid
@@ -2944,7 +2944,7 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: 'Начало текущего месячного цикла токенов. _(2026-06-16)_'
+          description: 'Начало текущего месячного цикла кредитов. _(2026-06-16)_'
         payment_source:
           type: string
           enum: [apple, google, web]
@@ -3055,7 +3055,7 @@ components:
           description: 'Заполняется при `status=failed`. Для Gemini ошибок — содержит первые 500 байт response body.'
         credits_charged:
           type: integer
-          description: 'Списанные токены = `credit_generate` камня (Quartz = 4). До 2026-06-16 всегда 1.'
+          description: 'Списанные кредиты = `credit_generate` камня (Quartz = 4). До 2026-06-16 всегда 1.'
         created_at:
           type: string
           format: date-time
