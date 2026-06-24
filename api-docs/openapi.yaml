@@ -30,6 +30,8 @@ info:
 
     Получение JWT: `POST /auth/v1/token?grant_type=password` с email и password.
 
+    Также поддерживается соцлогин (тот же итоговый JWT, через Supabase SDK, не REST-эндпоинт): **Google** (Android/iOS — нативный `signInWithIdToken`; Web — `signInWithOAuth` redirect) и **Apple Sign-In** (iOS native). Конфигурируется в Supabase Auth providers.
+
     ## Проекты (workspaces)
 
     Каждая генерация и каждый анализ принадлежит project'у. У юзера **всегда минимум 1 project** (backend invariant). Default project автоматически создаётся при signup с именем = сегодняшняя UTC дата в формате `YYYY-MM-DD` (например `2026-05-21`).
