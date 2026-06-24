@@ -48,6 +48,8 @@
     <h3>1.3. Information collected automatically</h3>
     <ul>
       <li><strong>Technical data:</strong> IP address, device type, operating system, browser, and similar technical identifiers necessary to operate the Service and protect against abuse.</li>
+      <li><strong>Analytics and app activity:</strong> via <strong>Firebase Analytics</strong> (Google), we collect app-usage events (screens viewed, features used), a Firebase app-instance identifier, and similar app-activity data to understand how the app is used and improve it. We do <strong>not</strong> collect the device advertising ID, and we do not use this data for advertising.</li>
+      <li><strong>Crash and diagnostic data:</strong> via <strong>Firebase Crashlytics</strong> (Google), we collect crash logs and diagnostic information (device model, OS version, app version, and similar) to detect and fix stability issues.</li>
       <li><strong>Authentication cookies / tokens:</strong> short-lived session tokens (JWTs) that keep you signed in. See Section 10 (Cookies).</li>
     </ul>
 
@@ -76,6 +78,7 @@
       <li><strong>Google Gemini API (AI processing):</strong> when you trigger an analysis or generation, your Input Image and structured prompts are sent to Google's Gemini API for processing. Google may retain submitted content for a short period for abuse-prevention purposes, per its own policies. See <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener">Google's Gemini API Terms</a>.</li>
       <li><strong>Payment and subscription providers:</strong> when you make a purchase, your payment is handled by third-party providers — <strong>Lemon Squeezy</strong> (web payments; acts as merchant of record), the <strong>Apple App Store</strong>, and <strong>Google Play</strong>. We use <strong>RevenueCat</strong> to manage and validate mobile subscription entitlements. These providers process your payment details under their own privacy policies; we receive a transaction record, not your full card or bank account numbers.</li>
       <li><strong>Cloudflare (web infrastructure):</strong> our website (<a href="https://runpik.com">runpik.com</a>) is delivered through Cloudflare. Cloudflare may collect technical request metadata (IP, user agent) for security and CDN purposes. See <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare's Privacy Policy</a>.</li>
+      <li><strong>Firebase (Google — analytics &amp; diagnostics):</strong> the mobile app uses <strong>Firebase Analytics</strong> (app-usage analytics), <strong>Firebase Crashlytics</strong> (crash and diagnostic reporting), and <strong>Firebase Remote Config</strong> (feature configuration). These process app-activity, diagnostic, and device-identifier data on our behalf to operate and improve the app. We do not enable advertising-ID collection. See <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase's Privacy and Security information</a>.</li>
       <li><strong>Sign-in providers (Google, Apple):</strong> if you choose social sign-in, Google or Apple authenticates you and provides us with your email and basic profile data to create or access your account (see Section 1.1). They process this under their own policies — see <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's Privacy Policy</a> and <a href="https://www.apple.com/legal/privacy/" target="_blank" rel="noopener">Apple's Privacy Policy</a>.</li>
     </ul>
     <p>We do <strong>not</strong> sell your personal information to any third party. We do not share your information for third-party advertising purposes.</p>
@@ -125,7 +128,7 @@
     <p>We use only the minimum cookies and similar technologies necessary to operate the Service. Specifically:</p>
     <ul>
       <li><strong>Authentication tokens (JWTs):</strong> short-lived tokens stored on your device that keep you signed in between sessions. These are strictly necessary and cannot be disabled if you wish to use authenticated features.</li>
-      <li><strong>No third-party advertising or tracking:</strong> we do not use Google Analytics, Facebook Pixel, or similar third-party tracking services on the Service.</li>
+      <li><strong>Analytics and diagnostics (mobile app):</strong> the app uses Firebase Analytics and Firebase Crashlytics (Google) to understand usage and fix crashes (see Sections 1.3 and 4). We do <strong>not</strong> use advertising networks, the device advertising ID, Facebook Pixel, or cross-app advertising trackers, and we do not use this data for advertising.</li>
     </ul>
 
     <h2>11. Changes to this policy</h2>
