@@ -2603,6 +2603,68 @@ paths:
         '404': { description: Карточка не найдена }
         '409': { description: Карточка опубликована — сначала unpublish }
 
+  /rest/v1/subscription_plans:
+    get:
+      tags: [Profile]
+      summary: Каталог тарифов (публичный, для paywall)
+      description: |
+        Тарифы для paywall. Публично читаемо (`is_active=true`). Источник правды для
+        названий/кредитов/фич/badge/highlight. Цены НЕ здесь (веб — `subscription_skus`,
+        натив — стор). `≈ N photos` = `credits_monthly` ÷ мин. `credit_generate`
+        активных gems (см. `GET /gems`).
+      parameters:
+        - { in: query, name: select, schema: { type: string }, example: '*' }
+        - { in: query, name: is_active, schema: { type: string }, example: eq.true }
+        - { in: query, name: order, schema: { type: string }, example: sort_order.asc }
+      responses:
+        '200':
+          description: Массив тарифов
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SubscriptionPlan' }
+
+  /rest/v1/subscription_skus:
+    get:
+      tags: [Profile]
+      summary: Цены и checkout-ссылки тарифов (публичный)
+      description: |
+        Строка на (план × период). `price_amount`+`currency` — веб display-цена
+        (для yearly — годовая сумма; клиент делит на 12 для «$/mo»).
+        `lemonsqueezy_buy_url` — web checkout (добавь
+        `&checkout[custom][user_id]=<uid>`). Натив-цена — из стора (`rc_package`).
+      parameters:
+        - { in: query, name: select, schema: { type: string }, example: '*' }
+        - { in: query, name: is_active, schema: { type: string }, example: eq.true }
+      responses:
+        '200':
+          description: Массив SKU
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SubscriptionSku' }
+
+  /rest/v1/subscriptions:
+    get:
+      tags: [Profile]
+      summary: Мои подписки (биллинг-история)
+      description: |
+        Подписки текущего юзера (RLS `auth.uid()=user_id`). Текущий план/статус для UI.
+        Пишутся только webhook'ами платформ (Lemon Squeezy / RevenueCat).
+      parameters:
+        - { in: query, name: select, schema: { type: string }, example: '*' }
+        - { in: query, name: order, schema: { type: string }, example: created_at.desc }
+      responses:
+        '200':
+          description: Массив подписок
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Subscription' }
+
 # ============================================================
 # COMPONENTS — Reusable schemas, security
 # ============================================================
@@ -2636,6 +2698,59 @@ components:
       description: UUID стиля из таблицы `styles`
 
   schemas:
+
+    # ---- Billing / subscriptions (paywall) ----
+
+    SubscriptionPlan:
+      type: object
+      description: 'Тариф (каталог paywall). Публично читаем (is_active=true). Цены не здесь.'
+      properties:
+        code: { type: string, example: creator }
+        title: { $ref: '#/components/schemas/LocalizedText' }
+        description: { $ref: '#/components/schemas/LocalizedText' }
+        credits_monthly: { type: integer, example: 180 }
+        features:
+          type: array
+          description: 'Фичи для карточки. Variant A: одинаковы у тарифов.'
+          items:
+            type: object
+            properties:
+              label: { $ref: '#/components/schemas/LocalizedText' }
+              included: { type: boolean }
+        badge: { type: object, nullable: true, description: 'Локализ. текст пилюли {en,ru} (Most popular / Best value) или null.' }
+        highlight: { type: string, nullable: true, enum: [popular, flagship], example: popular }
+        is_popular: { type: boolean }
+        is_active: { type: boolean }
+        sort_order: { type: integer }
+
+    SubscriptionSku:
+      type: object
+      description: 'SKU тарифа: план × период + цена/checkout. Публично читаем.'
+      properties:
+        plan_id: { type: string, format: uuid }
+        period: { type: string, enum: [monthly, yearly] }
+        price_amount: { type: number, example: 12, description: 'Веб display-цена; для yearly — годовая сумма.' }
+        currency: { type: string, example: USD }
+        price_display: { type: string, example: '$12/mo' }
+        lemonsqueezy_variant_id: { type: string, example: '1840415' }
+        lemonsqueezy_buy_url: { type: string, description: 'Web checkout; добавь `&checkout[custom][user_id]=<uid>`.' }
+        rc_package: { type: string, nullable: true, example: '$rc_monthly' }
+        is_active: { type: boolean }
+
+    Subscription:
+      type: object
+      description: 'Подписка юзера (RLS own). Пишется webhook платформ; кросс-платформенная.'
+      properties:
+        id: { type: string, format: uuid }
+        platform: { type: string, enum: [lemonsqueezy, revenuecat] }
+        store: { type: string, nullable: true, enum: [app_store, play_store] }
+        plan_id: { type: string, format: uuid, nullable: true }
+        period: { type: string, nullable: true, enum: [monthly, yearly] }
+        status: { type: string, enum: [active, trialing, cancelled, expired, paused, past_due, unknown] }
+        cancel_at_period_end: { type: boolean }
+        current_period_end: { type: string, format: date-time, nullable: true }
+        cancelled_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
 
     # ---- AI ecosystem (gems / engines) ----
 
