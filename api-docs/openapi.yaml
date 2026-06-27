@@ -2665,6 +2665,25 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Subscription' }
 
+  /rest/v1/payments:
+    get:
+      tags: [Profile]
+      summary: Мои платежи (история)
+      description: |
+        Платежи текущего юзера (RLS `auth.uid()=user_id`): покупки/продления/
+        возвраты. Пишутся только webhook'ами платформ (Lemon Squeezy / RevenueCat).
+      parameters:
+        - { in: query, name: select, schema: { type: string }, example: '*' }
+        - { in: query, name: order, schema: { type: string }, example: created_at.desc }
+      responses:
+        '200':
+          description: Массив платежей
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Payment' }
+
 # ============================================================
 # COMPONENTS — Reusable schemas, security
 # ============================================================
@@ -2734,7 +2753,9 @@ components:
         price_display: { type: string, example: '$12/mo' }
         lemonsqueezy_variant_id: { type: string, example: '1840415' }
         lemonsqueezy_buy_url: { type: string, description: 'Web checkout; добавь `&checkout[custom][user_id]=<uid>`.' }
-        rc_package: { type: string, nullable: true, example: '$rc_monthly' }
+        rc_package: { type: string, nullable: true, example: 'starter_monthly', description: 'RevenueCat package identifier (offering default).' }
+        google_product_id: { type: string, nullable: true, example: 'runpik_starter:starter-monthly', description: 'Google Play product:basePlan (RevenueCat-мапинг).' }
+        apple_product_id: { type: string, nullable: true, description: 'App Store product id (iOS — позже).' }
         is_active: { type: boolean }
 
     Subscription:
@@ -2750,6 +2771,24 @@ components:
         cancel_at_period_end: { type: boolean }
         current_period_end: { type: string, format: date-time, nullable: true }
         cancelled_at: { type: string, format: date-time, nullable: true }
+        is_test: { type: boolean, description: 'Sandbox/test событие (LS test_mode / RC SANDBOX). Реальные = false.' }
+        created_at: { type: string, format: date-time }
+
+    Payment:
+      type: object
+      description: 'Платёж юзера (RLS own). История денег; пишется webhook платформ.'
+      properties:
+        id: { type: string, format: uuid }
+        subscription_id: { type: string, format: uuid, nullable: true }
+        platform: { type: string, enum: [lemonsqueezy, revenuecat] }
+        store: { type: string, nullable: true, enum: [app_store, play_store] }
+        kind: { type: string, enum: [subscription_initial, subscription_renewal, topup, refund, other] }
+        status: { type: string, enum: [paid, refunded, partially_refunded, failed, pending] }
+        amount_cents: { type: integer, nullable: true, example: 500 }
+        currency: { type: string, nullable: true, example: USD }
+        discount_cents: { type: integer }
+        is_test: { type: boolean }
+        paid_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
 
     # ---- AI ecosystem (gems / engines) ----
