@@ -312,6 +312,9 @@
     // Shared current locale + a hook so the API-driven How-it-works section
     // re-localizes when the language switches.
     var curLang = 'en';
+    // Languages offered in the UI picker. hy translations are kept in the
+    // I18N dict below but NOT exposed in v1 — re-enable by adding 'hy' here.
+    var ENABLED_LANGS = ['en', 'ru'];
     var hiwRender = null;
     var inspireLoad = null;
     var examplesLoad = null;
@@ -471,7 +474,7 @@
     }
 
     function setLang(lang) {
-      if (!I18N[lang]) lang = 'en';
+      if (!I18N[lang] || ENABLED_LANGS.indexOf(lang) === -1) lang = 'en';
       curLang = lang;
       document.querySelectorAll('[data-i18n]').forEach(function (el) {
         var k = el.getAttribute('data-i18n');
@@ -516,6 +519,7 @@
         document.addEventListener('click', function (e) { if (menu.classList.contains('open') && !menu.contains(e.target)) close(); });
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
         menu.querySelectorAll('.lang-opt').forEach(function (opt) {
+          if (ENABLED_LANGS.indexOf(opt.getAttribute('data-lang')) === -1) { opt.style.display = 'none'; return; }
           opt.addEventListener('click', function () { setLang(opt.getAttribute('data-lang')); close(); });
         });
       }
