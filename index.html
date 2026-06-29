@@ -90,7 +90,7 @@
           <a class="btn-grad lg" href="https://app.runpik.com" target="_blank" rel="noopener" data-i18n="hero.try">Try for free</a>
           <a class="btn-ghost" href="#how-it-works" data-i18n="hero.how">See how it works</a>
         </div>
-        <div class="reassure" data-i18n="hero.reassure">6 free credits on signup · No credit card required</div>
+        <div class="reassure" data-i18n="hero.reassure">10 free credits on signup · No credit card required</div>
       </div>
 
       <div class="hero-visual">
@@ -220,22 +220,26 @@
         </div>
       </div>
 
-      <div class="cmp-reassure" data-i18n="hero.reassure">6 free credits on signup · No credit card required</div>
+      <div class="cmp-reassure" data-i18n="hero.reassure">10 free credits on signup · No credit card required</div>
     </div>
   </section>
 
-  <!-- ===================== PRICING (static — 4 credit packs) ===================== -->
+  <!-- ===================== PRICING (dynamic — live plans from backend) ===================== -->
   <section class="pricing" id="pricing">
     <div class="pricing-inner">
       <div class="sec-head">
         <div class="eyebrow" data-px="eyebrow">Pricing</div>
-        <h2 class="h" data-px="headline">Simple credit-based pricing</h2>
+        <h2 class="h" data-px="headline">Plans that scale with you</h2>
         <p class="s" data-px="sub"></p>
+      </div>
+      <div class="billtoggle" data-px="toggle" role="group" aria-label="Billing period">
+        <button type="button" data-period="monthly" data-px="monthly" class="active">Monthly</button>
+        <button type="button" data-period="yearly" data-px="yearly">Yearly</button>
       </div>
       <div class="pcards" data-px="cards"></div>
       <div class="freewrap">
         <div class="freebar">
-          <span class="plus">+3</span>
+          <span class="plus">10</span>
           <span class="ftext" data-px="free"></span>
         </div>
       </div>
@@ -328,7 +332,7 @@
         'hero.h2': 'No studio. No photographer.',
         'hero.sub': 'Turn an ordinary phone photo into studio-quality shots for your store — in minutes, not days.',
         'hero.try': 'Try for free', 'hero.how': 'See how it works',
-        'hero.reassure': '6 free credits on signup · No credit card required',
+        'hero.reassure': '10 free credits on signup · No credit card required',
         'ba.before': 'BEFORE', 'ba.after': 'AFTER',
         'ba.beforecap': 'Your phone photo', 'ba.aftercap': 'Studio result in minutes',
         'concepts.more': '+ more concepts — catalog, on-model, flat-lay',
@@ -374,7 +378,7 @@
         'hero.h2': 'Без студии. Без фотографа.',
         'hero.sub': 'Превратите обычное фото с телефона в студийные кадры для вашего магазина — за минуты, а не дни.',
         'hero.try': 'Попробовать бесплатно', 'hero.how': 'Как это работает',
-        'hero.reassure': '6 бесплатных кредитов при регистрации · Без карты',
+        'hero.reassure': '10 бесплатных кредитов при регистрации · Без карты',
         'ba.before': 'ДО', 'ba.after': 'ПОСЛЕ',
         'ba.beforecap': 'Ваше фото с телефона', 'ba.aftercap': 'Студийный результат за минуты',
         'concepts.more': '+ ещё концепты — каталог, на модели, flat-lay',
@@ -420,7 +424,7 @@
         'hero.h2': 'Առանց ստուդիայի։ Առանց լուսանկարչի։',
         'hero.sub': 'Վերածեք հեռախոսով արված սովորական լուսանկարը ստուդիական որակի կադրերի՝ ձեր խանութի համար, րոպեների, ոչ թե օրերի ընթացքում։',
         'hero.try': 'Փորձել անվճար', 'hero.how': 'Տեսնել՝ ինչպես է աշխատում',
-        'hero.reassure': '6 անվճար կրեդիտ գրանցման ժամանակ · Քարտ պետք չէ',
+        'hero.reassure': '10 անվճար կրեդիտ գրանցման ժամանակ · Քարտ պետք չէ',
         'ba.before': 'ՄԻՆՉ', 'ba.after': 'ՀԵՏՈ',
         'ba.beforecap': 'Ձեր հեռախոսի լուսանկարը', 'ba.aftercap': 'Ստուդիական արդյունք՝ րոպեների ընթացքում',
         'concepts.more': '+ այլ կոնցեպտներ՝ կատալոգ, մոդելի վրա, flat-lay',
@@ -952,53 +956,65 @@
       load(curLang);
     })();
 
-    // ===== Pricing (static, 4 credit packs) — placeholder numbers =====
-    // Hardcoded tiers; localized en/ru/hy; re-renders on language change.
-    // Replace TIERS numbers when real pricing is available.
+    // ===== Pricing (dynamic — live plans from backend) =====
+    // Plans + prices come from Supabase (subscription_plans + nested
+    // subscription_skus, anon-readable). "≈ N photos" is computed from the
+    // default gem's credit_generate (GET /gems). Re-renders on language and
+    // billing-period change. Falls back to a baked snapshot if the network
+    // fails, so the section never renders empty.
     (function () {
+      var SUPA = 'https://wnbtsqfdlbjwtetppdng.supabase.co';
+      // Public anon key — safe to expose in client code; reads are RLS-gated.
+      var ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InduYnRzcWZkbGJqd3RldHBwZG5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDQwMDAsImV4cCI6MjA5MzcyMDAwMH0.7mvR-FGSAzTZGRUzcz0tkGmNxWX3uwDxhtejrcwxxPM';
+      var PLANS_API = SUPA + '/rest/v1/subscription_plans?select=code,title,credits_monthly,is_popular,highlight,badge,features,sort_order,subscription_skus(period,price_display,is_active)&is_active=eq.true&order=sort_order';
+      var GEMS_API = 'https://wnbtsqfdlbjwtetppdng.functions.supabase.co/gems';
+
       var PX = {
         eyebrow: { en: 'Pricing', ru: 'Цены', hy: 'Գներ' },
-        headline: { en: 'Simple credit-based pricing', ru: 'Простые цены на кредиты', hy: 'Պարզ՝ կրեդիտների վրա հիմնված գներ' },
+        headline: { en: 'Plans that scale with you', ru: 'Тарифы, что растут вместе с вами', hy: 'Սակագներ, որ աճում են ձեզ հետ' },
         sub: {
-          en: '1 credit = 1 studio-quality photo. Buy what you need, no subscription.',
-          ru: '1 кредит = 1 студийное фото. Покупайте сколько нужно, без подписки.',
-          hy: '1 կրեդիտ = 1 ստուդիական լուսանկար։ Գնեք այնքան, որքան պետք է, առանց բաժանորդագրության։'
+          en: 'Every photo costs credits. Pick a monthly plan and cancel anytime — or start free.',
+          ru: 'Каждое фото стоит кредиты. Выберите тариф и отменяйте в любой момент — или начните бесплатно.',
+          hy: 'Յուրաքանչյուր լուսանկար արժե կրեդիտներ։ Ընտրեք սակագինը և չեղարկեք ցանկացած պահի՝ կամ սկսեք անվճար։'
         },
-        pack: { en: '/pack', ru: '/пакет', hy: '/փաթեթ' },
-        credits: { en: 'credits', ru: 'кредитов', hy: 'կրեդիտ' },
-        perPhoto: { en: 'per photo', ru: 'за фото', hy: 'մեկ լուսանկարի համար' },
-        bestValue: { en: 'best value', ru: 'выгоднее всего', hy: 'լավագույն արժեք' },
-        popular: { en: 'Popular', ru: 'Популярный', hy: 'Հանրաճանաչ' },
+        monthly: { en: 'Monthly', ru: 'Помесячно', hy: 'Ամսական' },
+        yearly: { en: 'Yearly', ru: 'На год', hy: 'Տարեկան' },
+        save: { en: 'save 30%', ru: '−30%', hy: '−30%' },
+        perMo: { en: '/mo', ru: '/мес', hy: '/ամիս' },
+        perYr: { en: '/yr', ru: '/год', hy: '/տարի' },
+        freePrice: { en: 'Free', ru: 'Бесплатно', hy: 'Անվճար' },
+        creditsMo: { en: 'credits / month', ru: 'кредитов / месяц', hy: 'կրեդիտ / ամիս' },
+        photosMo: { en: '≈ {n} photos / month', ru: '≈ {n} фото / месяц', hy: '≈ {n} լուսանկար / ամիս' },
+        billedYr: { en: '≈ {p}/mo billed yearly', ru: '≈ {p}/мес при оплате за год', hy: '≈ {p}/ամիս տարեկան վճարմամբ' },
         choose: { en: 'Choose', ru: 'Выбрать', hy: 'Ընտրել' },
+        startFree: { en: 'Start free', ru: 'Начать бесплатно', hy: 'Սկսել անվճար' },
         free: {
-          en: '3 free credits on signup — enough to test. No credit card required.',
-          ru: '3 бесплатных кредита при регистрации — хватит на тест. Без карты.',
-          hy: '3 անվճար կրեդիտ գրանցման ժամանակ՝ բավական է փորձելու համար։ Քարտ պետք չէ։'
+          en: 'Start on Basic — {n} free credits every month. No credit card required.',
+          ru: 'Начните с Basic — {n} бесплатных кредитов каждый месяц. Без карты.',
+          hy: 'Սկսեք Basic-ով — {n} անվճար կրեդիտ ամեն ամիս։ Քարտ պետք չէ։'
         }
       };
-      var F = {
-        photos: { en: '{n} studio photos', ru: '{n} студийных фото', hy: '{n} ստուդիական լուսանկար' },
-        concepts: { en: 'All concepts & styles', ru: 'Все концепты и стили', hy: 'Բոլոր կոնցեպտներն ու ոճերը' },
-        markets: { en: 'All marketplaces', ru: 'Все маркетплейсы', hy: 'Բոլոր մարկետփլեյսները' },
-        fullres: { en: 'Download in full resolution', ru: 'Скачивание в полном разрешении', hy: 'Ներբեռնում լրիվ լուծաչափով' },
-        priority: { en: 'Priority generation', ru: 'Приоритетная генерация', hy: 'Առաջնահերթ գեներացիա' },
-        early: { en: 'Early access to new styles', ru: 'Ранний доступ к новым стилям', hy: 'Վաղ հասանելիություն նոր ոճերին' },
-        support: { en: 'Dedicated support', ru: 'Персональная поддержка', hy: 'Անհատական աջակցություն' }
-      };
-      var TIERS = [
-        { name: 'Starter', price: '$9', credits: 50, unit: '~$0.18', popular: false,
-          tag: { en: 'For trying it out', ru: 'Чтобы попробовать', hy: 'Փորձելու համար' },
-          featKeys: ['concepts', 'markets', 'fullres'] },
-        { name: 'Pro', price: '$29', credits: 200, unit: '~$0.14', popular: true, badge: true, bestValue: true,
-          tag: { en: 'For active sellers', ru: 'Для активных продавцов', hy: 'Ակտիվ վաճառողների համար' },
-          featKeys: ['concepts', 'markets', 'priority', 'fullres'] },
-        { name: 'Studio', price: '$79', credits: 600, unit: '~$0.13', popular: false,
-          tag: { en: 'For high volume', ru: 'Для больших объёмов', hy: 'Մեծ ծավալների համար' },
-          featKeys: ['concepts', 'markets', 'priority', 'early'] },
-        { name: 'Business', price: '$149', credits: 1500, unit: '~$0.10', popular: false,
-          tag: { en: 'For teams & agencies', ru: 'Для команд и агентств', hy: 'Թիմերի և գործակալությունների համար' },
-          featKeys: ['concepts', 'markets', 'priority', 'early', 'support'] }
+
+      // Honest shared feature list — mirrors the backend seed (Variant A).
+      var FEAT = [
+        { label: { en: 'All shot types & scenes', ru: 'Все типы кадров и сцены' } },
+        { label: { en: 'All Inspire styles', ru: 'Все стили Inspire' } },
+        { label: { en: 'Improve & refine photos', ru: 'Улучшение и доработка фото' } },
+        { label: { en: 'All aspect ratios (1:1, 4:3, 16:9, 3:4, 9:16)', ru: 'Все форматы кадра (1:1, 4:3, 16:9, 3:4, 9:16)' } },
+        { label: { en: 'Lighting controls', ru: 'Управление освещением' } },
+        { label: { en: 'Commercial use', ru: 'Коммерческое использование' } }
       ];
+      // Baked fallback (mirrors backend seed) — used only if the live fetch fails.
+      var FALLBACK = [
+        { code: 'free', title: { en: 'Basic' }, credits_monthly: 10, is_popular: false, highlight: null, badge: null, features: FEAT, subscription_skus: [] },
+        { code: 'starter', title: { en: 'Starter' }, credits_monthly: 60, is_popular: false, highlight: null, badge: null, features: FEAT, subscription_skus: [{ period: 'monthly', is_active: true, price_display: '$5/mo' }, { period: 'yearly', is_active: true, price_display: '$42/yr' }] },
+        { code: 'creator', title: { en: 'Creator' }, credits_monthly: 180, is_popular: true, highlight: 'popular', badge: { en: 'Most popular', ru: 'Популярный' }, features: FEAT, subscription_skus: [{ period: 'monthly', is_active: true, price_display: '$12/mo' }, { period: 'yearly', is_active: true, price_display: '$99/yr' }] },
+        { code: 'pro', title: { en: 'Pro' }, credits_monthly: 450, is_popular: false, highlight: null, badge: null, features: FEAT, subscription_skus: [{ period: 'monthly', is_active: true, price_display: '$25/mo' }, { period: 'yearly', is_active: true, price_display: '$210/yr' }] },
+        { code: 'studio', title: { en: 'Studio' }, credits_monthly: 1400, is_popular: false, highlight: 'flagship', badge: { en: 'Best value', ru: 'Выгоднее всего' }, features: FEAT, subscription_skus: [{ period: 'monthly', is_active: true, price_display: '$50/mo' }, { period: 'yearly', is_active: true, price_display: '$420/yr' }] }
+      ];
+
+      var state = { plans: null, gen: 4, period: 'monthly' };
+
       var CK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
       var CG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="url(#cg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 
@@ -1006,9 +1022,18 @@
       function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
       function setText(sel, t) { var e = document.querySelector(sel); if (e) e.textContent = t; }
 
-      function featRow(text, popular) {
+      function skuFor(plan, period) {
+        var s = (plan.subscription_skus || []).filter(function (x) { return x.is_active && x.period === period; });
+        return s.length ? s[0] : null;
+      }
+      function priceParts(display) {
+        var main = String(display).split('/')[0].trim();
+        var num = parseFloat(main.replace(/[^0-9.]/g, ''));
+        return { main: main, num: isNaN(num) ? null : num };
+      }
+      function featRow(text, hot) {
         var pf = el('div', 'pf');
-        var ci = el('span', 'ci'); ci.innerHTML = popular ? CG : CK;
+        var ci = el('span', 'ci'); ci.innerHTML = hot ? CG : CK;
         var ct = el('span', 'ct'); ct.textContent = text;
         pf.appendChild(ci); pf.appendChild(ct);
         return pf;
@@ -1018,33 +1043,104 @@
         setText('[data-px="eyebrow"]', L(PX.eyebrow));
         setText('[data-px="headline"]', L(PX.headline));
         setText('[data-px="sub"]', L(PX.sub));
-        setText('[data-px="free"]', L(PX.free));
+
+        var mBtn = document.querySelector('[data-px="monthly"]');
+        var yBtn = document.querySelector('[data-px="yearly"]');
+        if (mBtn) mBtn.textContent = L(PX.monthly);
+        if (yBtn) yBtn.innerHTML = L(PX.yearly) + ' <span class="save">' + L(PX.save) + '</span>';
+        document.querySelectorAll('[data-px="toggle"] button').forEach(function (b) {
+          b.classList.toggle('active', b.dataset.period === state.period);
+        });
+
+        var plans = state.plans || FALLBACK;
+        var gen = state.gen || 4;
         var wrap = document.querySelector('[data-px="cards"]');
         if (!wrap) return;
         wrap.innerHTML = '';
-        TIERS.forEach(function (t) {
-          var card = el('div', 'pcard ' + (t.popular ? 'popular' : 'plain'));
-          if (t.badge) { var b = el('div', 'badge'); b.textContent = L(PX.popular); card.appendChild(b); }
-          var nm = el('div', 'pname'); nm.textContent = t.name; card.appendChild(nm);
-          var tag = el('div', 'ptag'); tag.textContent = L(t.tag); card.appendChild(tag);
-          var price = el('div', 'price'); price.innerHTML = t.price + ' <span class="per">' + L(PX.pack) + '</span>'; card.appendChild(price);
-          var cr = el('div', 'credits'); cr.textContent = t.credits + ' ' + L(PX.credits); card.appendChild(cr);
-          var unit = el('div', 'unit');
-          unit.innerHTML = t.unit + ' ' + L(PX.perPhoto) + (t.bestValue ? ' · <span class="bv">' + L(PX.bestValue) + '</span>' : '');
-          card.appendChild(unit);
+
+        var freeCredits = null;
+        plans.forEach(function (p) {
+          var isFree = p.code === 'free' || !(p.subscription_skus && p.subscription_skus.length);
+          var hot = !!p.highlight;
+          var card = el('div', 'pcard ' + (hot ? 'popular' : 'plain') + (p.is_popular ? ' lift' : '') + (p.highlight === 'flagship' ? ' flagship' : ''));
+          if (p.badge) { var bg = el('div', 'badge'); bg.textContent = L(p.badge); card.appendChild(bg); }
+
+          var nm = el('div', 'pname'); nm.textContent = L(p.title); card.appendChild(nm);
+
+          var price = el('div', 'price');
+          if (isFree) {
+            if (p.code === 'free') freeCredits = p.credits_monthly;
+            price.textContent = L(PX.freePrice);
+          } else {
+            var sku = skuFor(p, state.period);
+            if (sku) {
+              var pp = priceParts(sku.price_display);
+              var per = state.period === 'monthly' ? L(PX.perMo) : L(PX.perYr);
+              price.innerHTML = pp.main + ' <span class="per">' + per + '</span>';
+            } else {
+              price.textContent = '—';
+            }
+          }
+          card.appendChild(price);
+
+          if (!isFree && state.period === 'yearly') {
+            var ysku = skuFor(p, 'yearly');
+            if (ysku) {
+              var yp = priceParts(ysku.price_display);
+              if (yp.num != null) {
+                var mo = yp.num / 12;
+                var moStr = '$' + (mo >= 10 ? Math.round(mo) : mo.toFixed(1));
+                var pe = el('div', 'peryr'); pe.textContent = L(PX.billedYr).replace('{p}', moStr);
+                card.appendChild(pe);
+              }
+            }
+          }
+
+          var cr = el('div', 'credits'); cr.textContent = p.credits_monthly + ' ' + L(PX.creditsMo); card.appendChild(cr);
+
           card.appendChild(el('div', 'card-div'));
+
           var feats = el('div', 'pfeats');
-          feats.appendChild(featRow(L(F.photos).replace('{n}', t.credits), t.popular));
-          t.featKeys.forEach(function (k) { feats.appendChild(featRow(L(F[k]), t.popular)); });
+          var photos = Math.max(1, Math.round(p.credits_monthly / gen));
+          feats.appendChild(featRow(L(PX.photosMo).replace('{n}', photos), hot));
+          (p.features || []).forEach(function (f) { if (f.included !== false) feats.appendChild(featRow(L(f.label), hot)); });
           card.appendChild(feats);
-          var cta = el('a', 'cta ' + (t.popular ? 'grad' : 'outline'));
-          cta.href = 'https://app.runpik.com'; cta.target = '_blank'; cta.rel = 'noopener'; cta.textContent = L(PX.choose) + ' ' + t.name;
+
+          var cta = el('a', 'cta ' + (hot ? 'grad' : 'outline'));
+          cta.href = 'https://app.runpik.com'; cta.target = '_blank'; cta.rel = 'noopener';
+          cta.textContent = isFree ? L(PX.startFree) : (L(PX.choose) + ' ' + L(p.title));
           card.appendChild(cta);
+
           wrap.appendChild(card);
         });
+
+        var fc = freeCredits != null ? freeCredits : 10;
+        var plus = document.querySelector('.freebar .plus');
+        var fb = document.querySelector('[data-px="free"]');
+        if (plus) plus.textContent = fc;
+        if (fb) fb.textContent = L(PX.free).replace('{n}', fc);
       }
+
       pricingRender = render;
+
+      document.querySelectorAll('[data-px="toggle"] button').forEach(function (btn) {
+        btn.addEventListener('click', function () { state.period = btn.dataset.period; render(); });
+      });
+
+      // Paint immediately with the fallback, then hydrate from the network.
       render();
+      Promise.all([
+        fetch(PLANS_API, { headers: { apikey: ANON, Authorization: 'Bearer ' + ANON, Accept: 'application/json' } }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+        fetch(GEMS_API, { headers: { Accept: 'application/json' } }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+      ]).then(function (res) {
+        var plans = res[0], gems = res[1];
+        if (plans && plans.length) state.plans = plans;
+        if (gems && gems.gems && gems.gems.length) {
+          var costs = gems.gems.map(function (g) { return g.credit_generate; }).filter(function (n) { return typeof n === 'number' && n > 0; });
+          if (costs.length) state.gen = Math.min.apply(null, costs);
+        }
+        render();
+      });
     })();
   </script>
 
