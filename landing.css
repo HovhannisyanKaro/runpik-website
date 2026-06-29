@@ -657,7 +657,6 @@ footer .brand .word { font-size: 22px; font-weight: 500; letter-spacing: -0.01em
 }
 @media (max-width: 560px) {
   .pcards { grid-template-columns: 1fr; gap: 16px; }
-  .pcards .pcard.lift { order: -1; }
   .freebar { padding: 14px 20px; }
   .freebar .ftext { font-size: 13px; }
 }

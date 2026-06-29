@@ -207,8 +207,8 @@
 
         <div class="runpik">
           <div class="cmp-label">Runpik</div>
-          <div class="stat" data-i18n="cmp.runpik.stat">~5 minutes</div>
-          <div class="substat" data-i18n="cmp.runpik.substat">from $0.39 per photo</div>
+          <div class="stat" data-i18n="cmp.runpik.stat">~2 minutes</div>
+          <div class="substat" data-i18n="cmp.runpik.substat">from $0.10 per photo</div>
           <div class="card-div"></div>
           <div class="feats">
             <div class="feat"><span class="fi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="url(#cg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="ft" data-i18n="cmp.runpik.f1">Upload a photo, pick a concept — 2 taps</span></div>
@@ -346,8 +346,8 @@
         'cmp.trad.f2': 'Retouching and editing — many iterations',
         'cmp.trad.f3': 'Days of back-and-forth',
         'cmp.trad.f4': 'Expensive per single product',
-        'cmp.runpik.stat': '~5 minutes',
-        'cmp.runpik.substat': 'from $0.39 per photo',
+        'cmp.runpik.stat': '~2 minutes',
+        'cmp.runpik.substat': 'from $0.10 per photo',
         'cmp.runpik.f1': 'Upload a photo, pick a concept — 2 taps',
         'cmp.runpik.f2': 'Unlimited variations, instantly',
         'cmp.runpik.f3': 'Results in minutes, any time',
@@ -392,8 +392,8 @@
         'cmp.trad.f2': 'Ретушь и правки — много итераций',
         'cmp.trad.f3': 'Дни переписки и согласований',
         'cmp.trad.f4': 'Дорого за каждый товар',
-        'cmp.runpik.stat': '~5 минут',
-        'cmp.runpik.substat': 'от $0.39 за фото',
+        'cmp.runpik.stat': '~2 минуты',
+        'cmp.runpik.substat': 'от $0.10 за фото',
         'cmp.runpik.f1': 'Загрузите фото, выберите концепт — 2 тапа',
         'cmp.runpik.f2': 'Безлимит вариаций, мгновенно',
         'cmp.runpik.f3': 'Результат за минуты, в любое время',
@@ -438,8 +438,8 @@
         'cmp.trad.f2': 'Ռետուշ և խմբագրում՝ բազմաթիվ կրկնություններ',
         'cmp.trad.f3': 'Օրերով նամակագրություն և համաձայնեցում',
         'cmp.trad.f4': 'Թանկ՝ յուրաքանչյուր ապրանքի համար',
-        'cmp.runpik.stat': '~5 րոպե',
-        'cmp.runpik.substat': '$0.39-ից մեկ լուսանկարի համար',
+        'cmp.runpik.stat': '~2 րոպե',
+        'cmp.runpik.substat': '$0.10-ից մեկ լուսանկարի համար',
         'cmp.runpik.f1': 'Վերբեռնեք լուսանկար, ընտրեք կոնցեպտ՝ 2 հպում',
         'cmp.runpik.f2': 'Անսահման տարբերակներ՝ ակնթարթորեն',
         'cmp.runpik.f3': 'Արդյունք րոպեների ընթացքում, ցանկացած ժամանակ',
@@ -986,6 +986,7 @@
         creditsMo: { en: 'credits / month', ru: 'кредитов / месяц', hy: 'կրեդիտ / ամիս' },
         photosMo: { en: '≈ {n} photos / month', ru: '≈ {n} фото / месяц', hy: '≈ {n} լուսանկար / ամիս' },
         billedYr: { en: '≈ {p}/mo billed yearly', ru: '≈ {p}/мес при оплате за год', hy: '≈ {p}/ամիս տարեկան վճարմամբ' },
+        fromPhoto: { en: 'from {p} per photo', ru: 'от {p} за фото', hy: '{p}-ից մեկ լուսանկարի համար' },
         choose: { en: 'Choose', ru: 'Выбрать', hy: 'Ընտրել' },
         startFree: { en: 'Start free', ru: 'Начать бесплатно', hy: 'Սկսել անվճար' },
         free: {
@@ -1030,6 +1031,23 @@
         var main = String(display).split('/')[0].trim();
         var num = parseFloat(main.replace(/[^0-9.]/g, ''));
         return { main: main, num: isNaN(num) ? null : num };
+      }
+      // Cheapest real cost per generated photo across all active plans/periods
+      // (monthly-equivalent price ÷ monthly credits × credits-per-photo).
+      function cheapestPerPhoto(plans, gen) {
+        var best = null;
+        plans.forEach(function (p) {
+          if (!p.credits_monthly) return;
+          (p.subscription_skus || []).forEach(function (s) {
+            if (!s.is_active) return;
+            var pp = priceParts(s.price_display);
+            if (pp.num == null) return;
+            var monthly = s.period === 'yearly' ? pp.num / 12 : pp.num;
+            var perPhoto = (monthly / p.credits_monthly) * gen;
+            if (best == null || perPhoto < best) best = perPhoto;
+          });
+        });
+        return best;
       }
       function featRow(text, hot) {
         var pf = el('div', 'pf');
@@ -1119,6 +1137,11 @@
         var fb = document.querySelector('[data-px="free"]');
         if (plus) plus.textContent = fc;
         if (fb) fb.textContent = L(PX.free).replace('{n}', fc);
+
+        // "Why Runpik" comparison: cheapest cost-per-photo, computed live.
+        var cpp = cheapestPerPhoto(plans, gen);
+        var sub = document.querySelector('[data-i18n="cmp.runpik.substat"]');
+        if (sub && cpp != null) sub.textContent = L(PX.fromPhoto).replace('{p}', '$' + cpp.toFixed(2));
       }
 
       pricingRender = render;
