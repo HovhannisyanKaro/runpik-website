@@ -1047,7 +1047,7 @@ paths:
       tags: [AI Pipeline]
       summary: Preview финального Stage 2 промпта (testing only)
       description: |
-        **Dev/testing helper.** Возвращает финальный Stage 2 промпт, который `/generate` **отправил бы** в Gemini Image — но **без** списания кредита, вызова Gemini, записи в `generations` или Storage.
+        **Admin debug helper.** Возвращает финальный Stage 2 промпт, который `/generate` **отправил бы** в Gemini Image — без списания кредита, генерации картинки, записи в `generations` или Storage. Опционально принимает фото ФО (`environment_image_path`) → прогоняет тот же анализатор, что `POST /environments`, и подмешивает `scene_prompt` как **ENVIRONMENT OVERLAY** (ФО компонуется с `shot_type` + `lighting`). Только анализ ФО вызывает Gemini; сборка промпта — нет.
 
         Реюзит ту же детерминированную `buildStage2Prompt()`, что `/generate` использует на шаге 12 → preview-промпт **байт-в-байт совпадает** с продакшн-промптом при тех же входах.
 
@@ -1083,7 +1083,11 @@ paths:
                 style_id:
                   type: string
                   format: uuid
-                  description: 'UUID стиля (любой publish-статус — это testing tool). Optional. Подмешивает STYLE OVERLAY в превью-промпт так же, как в `/generate`.'
+                  description: 'UUID стиля (любой publish-статус — это testing tool). Optional. Подмешивает STYLE OVERLAY в превью-промпт так же, как в `/generate`. Взаимоисключимо с `environment_image_path` (оба → 400).'
+                environment_image_path:
+                  type: string
+                  description: 'Путь к фото ФО в bucket `environments` (обязан начинаться с `{user_id}/`). Optional. Прогоняется через анализатор окружения → `scene_prompt` подмешивается как ENVIRONMENT OVERLAY. ФО компонуется с `shot_type` + `lighting`.'
+                  example: 5bf54c31-1418-4282-bb0e-24565f4d121b/scene.jpg
       responses:
         '200':
           description: Финальный Stage 2 промпт + метаданные анализа
@@ -1112,6 +1116,13 @@ paths:
                     description: Финальный промпт для копирования в Gemini веб
                   prompt_length:
                     type: integer
+                  environment_applied:
+                    type: boolean
+                    description: true если передан `environment_image_path`
+                  scene_prompt:
+                    type: string
+                    nullable: true
+                    description: ФО-overlay текст (null если ФО не задан)
                   is_suitable:
                     type: boolean
                   warnings:
@@ -1123,15 +1134,19 @@ paths:
                     items:
                       type: string
         '400':
-          description: Malformed JSON / missing analysis_id / invalid lighting / prompt build error (неизвестная category или невалидный shot_type)
+          description: 'Malformed JSON / missing analysis_id / invalid lighting / prompt build error / заданы и `style_id`, и `environment_image_path`'
         '401':
           description: Нет/невалидный JWT
         '403':
-          description: 'Не админ (нужна роль curator/admin/superadmin); или `analyses.user_id !== auth.uid()` — анализ не твой'
+          description: 'Не админ (нужна роль curator/admin/superadmin); или анализ / `environment_image_path` не принадлежат юзеру'
         '404':
-          description: '`analysis_id` не найден'
+          description: '`analysis_id` не найден; или фото ФО нет в bucket `environments`'
+        '422':
+          description: 'На фото ФО нет пригодного окружения — { error, blockers }'
         '500':
           description: Missing env vars / DB lookup failure
+        '502':
+          description: Gemini fail при анализе ФО (только если передан `environment_image_path`)
 
   /functions/v1/preview-environment-prompt:
     post:
