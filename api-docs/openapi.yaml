@@ -864,7 +864,7 @@ paths:
                   type: string
                   format: uuid
                   description: |
-                    UUID окружения «Фото окружения» (см. `GET /functions/v1/environments`). Optional. Подмешивает `scene_prompt` окружения как секцию **ENVIRONMENT OVERLAY** в конец Stage 2 prompt (исходное фото окружения в модель НЕ уходит — только текст). Без `shot_type` — environment-only режим (сцену/свет задаёт окружение); с `shot_type` — shot-type блок + overlay. **Взаимоисключимо со `style_id`** (заданы оба → 400). Окружение должно принадлежать юзеру (иначе 403/404). Пишется в `generations.environment_id`.
+                    UUID окружения «Фото окружения» (см. `GET /functions/v1/environments`). Optional. Подмешивает `scene_prompt` окружения как секцию **ENVIRONMENT OVERLAY** в конец Stage 2 prompt (исходное фото окружения в модель НЕ уходит — только текст). **ФО = только фон/локация:** всегда компонуется с `shot_type` (презентация) и `lighting` — меняет только сеттинг/фон, не заменяет их (свет берётся из секции LIGHTING). Для setting-aware шота (`on_model`) SCENE отдаёт локацию оверлею. **Взаимоисключимо только со `style_id`** (заданы оба → 400). Окружение должно принадлежать юзеру (иначе 403/404). Пишется в `generations.environment_id`.
                 product_name:
                   type: string
                   maxLength: 60
