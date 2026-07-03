@@ -860,6 +860,11 @@ paths:
                   format: uuid
                   description: |
                     UUID опубликованного Inspire-стиля (см. `GET /functions/v1/styles`). Optional. Подмешивает `style_prompt` стиля как секцию **STYLE OVERLAY** в конец Stage 2 prompt. Если задан `style_id` **без** `shot_type` — style-only режим (без shot-type блока; композицию/свет задаёт стиль). Если оба — shot-type блок + overlay. Категория продукта не должна быть в `excluded_categories` стиля (иначе 400). Полностью backward-compatible — запрос без `style_id` идентичен прежнему.
+                environment_id:
+                  type: string
+                  format: uuid
+                  description: |
+                    UUID окружения «Фото окружения» (см. `GET /functions/v1/environments`). Optional. Подмешивает `scene_prompt` окружения как секцию **ENVIRONMENT OVERLAY** в конец Stage 2 prompt (исходное фото окружения в модель НЕ уходит — только текст). Без `shot_type` — environment-only режим (сцену/свет задаёт окружение); с `shot_type` — shot-type блок + overlay. **Взаимоисключимо со `style_id`** (заданы оба → 400). Окружение должно принадлежать юзеру (иначе 403/404). Пишется в `generations.environment_id`.
                 product_name:
                   type: string
                   maxLength: 60
@@ -879,7 +884,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/GenerateResponse'
         '400':
-          description: 'Malformed JSON / missing analysis_id / invalid lighting или aspect_ratio slug / `style_id` не UUID / стиль не найден или не опубликован / категория продукта в `excluded_categories` стиля'
+          description: 'Malformed JSON / missing analysis_id / invalid lighting или aspect_ratio slug / `style_id` не UUID / стиль не найден или не опубликован / категория продукта в `excluded_categories` стиля / заданы и `style_id`, и `environment_id` / `environment_id` не UUID'
         '402':
           description: Недостаточно кредитов (`balance < стоимости камня`, Quartz = 4)
           content:
@@ -897,9 +902,9 @@ paths:
                     type: integer
                     example: 4
         '403':
-          description: '`analyses.user_id !== auth.uid()` — анализ не твой'
+          description: '`analyses.user_id !== auth.uid()` — анализ не твой; или `environment_id` не принадлежит юзеру'
         '404':
-          description: '`analysis_id` не найден или input image удалён между /analyze и /generate'
+          description: '`analysis_id` не найден / input image удалён между /analyze и /generate / `environment_id` не найден'
         '422':
           description: 'Verdict recheck failed — `analysis.is_suitable.verdict = false`. **Кредиты НЕ списаны.**'
           content:
