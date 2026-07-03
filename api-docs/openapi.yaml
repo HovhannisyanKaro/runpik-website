@@ -1055,6 +1055,8 @@ paths:
 
         **Не часть клиентского flow** — Flutter app его не вызывает. `aspect_ratio` не принимается (не часть текста промпта — в продакшне это отдельный `imageConfig.aspectRatio`).
 
+        🔒 **Admin-only (2026-07-03):** `requireAdmin` — нужна роль `curator`/`admin`/`superadmin` (любой не-`user`). Раньше был доступен любому аутентифицированному юзеру; логика построения промпта и ответ не изменились, добавлен только gate.
+
         **Verdict:** промпт строится независимо от `is_suitable.verdict` (в отличие от `/generate`, который вернул бы 422). Verdict отдаётся в ответе.
       requestBody:
         required: true
@@ -1125,11 +1127,93 @@ paths:
         '401':
           description: Нет/невалидный JWT
         '403':
-          description: '`analyses.user_id !== auth.uid()` — анализ не твой'
+          description: 'Не админ (нужна роль curator/admin/superadmin); или `analyses.user_id !== auth.uid()` — анализ не твой'
         '404':
           description: '`analysis_id` не найден'
         '500':
           description: Missing env vars / DB lookup failure
+
+  /functions/v1/preview-environment-prompt:
+    post:
+      tags: [AI Pipeline]
+      summary: Preview scene_prompt окружения (admin debug)
+      description: |
+        **Admin-only отладочный инструмент** — сиблинг `/preview-prompt`, но для Фото окружения (`/functions/v1/environments`). Прогоняет фото сцены через **тот же анализатор**, что боевой `POST /environments` (общий код `_shared/environment-analysis.ts` — превью == прод), и возвращает извлечённый `scene_prompt` (текст ENVIRONMENT OVERLAY).
+
+        **Ничего не сохраняет** (ни строки `environments`, ни кредитов, ни Storage). Бесплатно (как `/analyze` и `/preview-prompt`).
+
+        🔒 **Gate:** `requireAdmin` — любая elevated-роль (`curator`/`admin`/`superadmin`). Обычный `user` → 403.
+
+        🔑 **Инвариант:** `scene_prompt` обычно backend-only и НЕ возвращается ни `POST /environments`, ни `GET /environments`. Он отдаётся **только на этом admin-gated роуте**.
+
+        **Flow:** залей тестовое фото сцены в приватный bucket `environments` (path `{user_id}/{filename}`), затем пошли путь сюда.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input_image_path]
+              properties:
+                input_image_path:
+                  type: string
+                  description: 'Путь в приватном bucket `environments`, обязан начинаться с `{user_id}/`.'
+                  example: 5bf54c31-1418-4282-bb0e-24565f4d121b/scene.jpg
+      responses:
+        '200':
+          description: 'scene_prompt + производные поля (виден только админу)'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scene_prompt:
+                    type: string
+                    description: 'Полный текст ENVIRONMENT OVERLAY (backend-only; отдаётся только здесь)'
+                  scene_prompt_length:
+                    type: integer
+                  name:
+                    $ref: '#/components/schemas/LocalizedString'
+                  tags:
+                    type: array
+                    items:
+                      type: string
+                  summary:
+                    type: object
+                    properties:
+                      location_type:
+                        type: string
+                        nullable: true
+                      mood:
+                        type: string
+                        nullable: true
+                  is_suitable:
+                    type: object
+                    properties:
+                      verdict:
+                        type: boolean
+                      confidence:
+                        type: integer
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+                      blockers:
+                        type: array
+                        items:
+                          type: string
+        '400':
+          description: Malformed JSON / нет input_image_path
+        '401':
+          description: Нет/невалидный JWT
+        '403':
+          description: 'Не админ (нужна роль curator/admin/superadmin); или input_image_path не принадлежит юзеру'
+        '404':
+          description: Фото нет в bucket environments
+        '422':
+          description: 'На фото нет пригодного окружения — { error, blockers }'
+        '502':
+          description: Gemini fetch fail / пустой ответ / невалидный JSON
 
   /functions/v1/shot-types:
     get:
