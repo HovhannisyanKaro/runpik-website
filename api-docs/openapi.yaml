@@ -818,6 +818,8 @@ paths:
 
         **Биллинг (с 2026-06-16):** списывается `credit_generate` камня в **кредитах** (дефолтный камень Quartz = **4**), а не фикс-1. Камень — поле `gem_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации кредиты НЕ списываются** (refund не нужен — списания просто нет).
 
+        **ФО-надбавка (с 2026-07-06):** при `environment_id` сверху списывается `credit_env_analyze` камня (Quartz = **1**) → итог **5**, отдельной строкой в леджере (`operation=env_analyze`). Баланс гейтится на полную сумму.
+
         **Длительная операция:** 8 сек в mock mode, 10-30 сек реальный Gemini. Показывай loading state с прогрессом.
 
         **Verdict recheck:** если `analysis.is_suitable.verdict = false` — возвращает 422 **без charge'а кредита**. Defense-in-depth на случай если frontend пропустил blockers в `/analyze` response.
@@ -1690,6 +1692,7 @@ paths:
                         credit_generate: { type: integer, example: 4 }
                         credit_improve: { type: integer, example: 2 }
                         credit_analyze: { type: integer, example: 0 }
+                        credit_env_analyze: { type: integer, example: 1 }
                         is_default: { type: boolean }
                         sort_order: { type: integer }
                   content_types:
@@ -3052,6 +3055,7 @@ components:
         credit_generate: { type: integer, minimum: 0, description: 'Кредиты за generate (Quartz=4).' }
         credit_improve: { type: integer, minimum: 0, description: 'Кредиты за improve (Quartz=2).' }
         credit_analyze: { type: integer, minimum: 0, description: 'Кредиты за analyze (обычно 0).' }
+        credit_env_analyze: { type: integer, minimum: 0, description: 'Надбавка при генерации с ФО «Фото окружения» (Quartz=1). Списывается сверх credit_generate.' }
         generate_engines:
           type: array
           items: { $ref: '#/components/schemas/EngineRef' }
@@ -3088,6 +3092,7 @@ components:
         token_generate: { type: integer, description: 'Родной токен-хинт движка (подсказка при создании камня).' }
         token_improve: { type: integer }
         token_analyze: { type: integer }
+        token_env_analyze: { type: integer, description: 'Токен-хинт под ФО-анализ (только подсказка, не списывается).' }
         api_key_name: { type: string, description: 'ИМЯ Edge-секрета (Deno.env), НЕ значение ключа.' }
         valid_until: { type: string, format: date, description: 'YYYY-MM-DD; UI предупреждает о скором EOL.' }
         notes: { type: string }
