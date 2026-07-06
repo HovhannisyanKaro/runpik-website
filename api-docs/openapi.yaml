@@ -1301,7 +1301,7 @@ paths:
       tags: [Admin]
       summary: Список всех камней (superadmin only)
       description: |
-        CRUD каталога камней (`gems`). **Доступ: только `superadmin`** (`requireSuperadmin`). Мутации → `admin_audit_log` (`gem.*`). GET возвращает все камни (вкл. неактивные + `generate_engines`/`analyze_engines`). `display_name`/`description` приходят как объекты `{en,ru,hy}` (в отличие от публичного `/gems`, где строка).
+        CRUD каталога камней (`gems`). **Доступ: только `superadmin`** (`requireSuperadmin`). Мутации → `admin_audit_log` (`gem.*`). GET возвращает все камни (вкл. неактивные + engine-списки `generate_engines`/`improve_engines`/`analyze_engines`/`env_analyze_engines`). `display_name`/`description` приходят как объекты `{en,ru,hy}` (в отличие от публичного `/gems`, где строка).
       responses:
         '200':
           description: 'Все камни (обёртка `{ gems, total }`, НЕ голый массив)'
@@ -3059,10 +3059,19 @@ components:
         generate_engines:
           type: array
           items: { $ref: '#/components/schemas/EngineRef' }
-          description: 'Движки для generate (и improve), по приоритету + fallback. Каждый engine_id валидируется.'
+          description: 'Движки для generate (image), по приоритету + fallback. Каждый engine_id валидируется.'
+        improve_engines:
+          type: array
+          items: { $ref: '#/components/schemas/EngineRef' }
+          description: 'Движки для improve (image). Отдельно от generate_engines (2026-07-06).'
         analyze_engines:
           type: array
           items: { $ref: '#/components/schemas/EngineRef' }
+          description: 'Движки для продуктового анализа (text-модель). С 2026-07-06 реально используются (не хардкод).'
+        env_analyze_engines:
+          type: array
+          items: { $ref: '#/components/schemas/EngineRef' }
+          description: 'Движки для анализа ФО «Фото окружения» (text-модель).'
         is_active: { type: boolean }
         sort_order: { type: integer }
         is_default: { type: boolean, description: 'true авто-снимает default у других камней того же типа.' }
