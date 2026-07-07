@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Runpik Backend API
-  version: '2026-06-17'
+  version: '2026-07-07'
   description: |
     AI-сервис продуктовой фотографии. Документация описывает client-facing
     API контракт: Edge Functions, PostgREST endpoints для прямого доступа
