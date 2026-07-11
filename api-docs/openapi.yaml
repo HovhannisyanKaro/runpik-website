@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Runpik Backend API
-  version: '2026-07-07'
+  version: '2026-07-11'
   description: |
     AI-сервис продуктовой фотографии. Документация описывает client-facing
     API контракт: Edge Functions, PostgREST endpoints для прямого доступа
@@ -612,7 +612,7 @@ paths:
       tags: [AI Pipeline]
       summary: Улучшить генерацию (новая версия)
       description: |
-        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. **Биллинг (с 2026-06-16):** списывается `credit_improve` камня в кредитах (Quartz = 2) через `spend_credits` **по факту успеха**; камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный IMAGE). При сбое строка версии удаляется, кредиты не списываются.
+        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. **Биллинг (с 2026-06-16; операции 2026-07-11):** списывается цена операции `improve` камня в кредитах (Quartz = 3, `gem_operations`) через `spend_credits` **по факту успеха**; камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный IMAGE). При сбое строка версии удаляется, кредиты не списываются.
 
         Каждая версия — обычная строка `generations`: `root_generation_id` (группа), `version_index` (0=оригинал, 1=V1…), `improvement_prompt`, `source_generation_id` (откуда улучшали). MVP **linear**: новая версия = `max(version_index)+1`.
 
@@ -816,7 +816,7 @@ paths:
       description: |
         **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/analyze`, строит Stage 2 prompt, прогоняет через движки выбранного **камня** (`gems`) с priority+retry+fallback, загружает output в `outputs` bucket, возвращает signed URL.
 
-        **Биллинг (с 2026-06-16):** списывается `credit_generate` камня в **кредитах** (дефолтный камень Quartz = **4**), а не фикс-1. Камень — поле `gem_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации кредиты НЕ списываются** (refund не нужен — списания просто нет).
+        **Биллинг (с 2026-06-16; операции 2026-07-11):** списывается цена операции `generate` камня в **кредитах** (Quartz = **4**, `gem_operations`); при ФО сверху операция `env_analyze` (стоимость = сумма операций). Камень — поле `gem_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации кредиты НЕ списываются** (refund не нужен — списания просто нет).
 
         **ФО-надбавка (с 2026-07-06):** при `environment_id` сверху списывается `credit_env_analyze` камня (Quartz = **1**) → итог **5**, отдельной строкой в леджере (`operation=env_analyze`). Баланс гейтится на полную сумму.
 
@@ -877,7 +877,7 @@ paths:
                   type: string
                   format: uuid
                   description: |
-                    Какой «камень» (`gems`) использовать. Optional — NULL → дефолтный камень для IMAGE. Должен быть UUID активного камня. Цена генерации = `credit_generate` камня (Quartz = 4 кредита). Пишется в `generations.gem_id`; реально отработавший движок — в `generations.engine_id`. (2026-06-16)
+                    Какой «камень» (`gems`) использовать. Optional — NULL → дефолтный камень для IMAGE. Должен быть UUID активного камня. Цена генерации = операция `generate` камня (Quartz = 4 кредита, `gem_operations`). Пишется в `generations.gem_id`; реально отработавший движок — в `generations.engine_id`. (2026-06-16)
       responses:
         '200':
           description: 'Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.'
@@ -1334,7 +1334,7 @@ paths:
       tags: [Admin]
       summary: Список всех камней (superadmin only)
       description: |
-        CRUD каталога камней (`gems`). **Доступ: только `superadmin`** (`requireSuperadmin`). Мутации → `admin_audit_log` (`gem.*`). GET возвращает все камни (вкл. неактивные + engine-списки `generate_engines`/`improve_engines`/`analyze_engines`/`env_analyze_engines`). `display_name`/`description` приходят как объекты `{en,ru,hy}` (в отличие от публичного `/gems`, где строка).
+        CRUD каталога камней (`gems`) и их операций (`gem_operations`). **Доступ: только `superadmin`** (`requireSuperadmin`). Мутации → `admin_audit_log` (`gem.*`). GET возвращает все камни (вкл. неактивные), у каждого поле `operations` (полные строки `gem_operations` с `engines`+`note`). `display_name`/`description` приходят как объекты `{en,ru,hy}` (в отличие от публичного `/gems`, где строка). **2026-07-11:** цены/движки сняты с камня → операции (`PUT/DELETE /admin-gems/{id}/operations/{op}`).
       responses:
         '200':
           description: 'Все камни (обёртка `{ gems, total }`, НЕ голый массив)'
@@ -1350,7 +1350,7 @@ paths:
     post:
       tags: [Admin]
       summary: Создать камень (superadmin only)
-      description: 'Required: `code`, `gen_content_type_id`. `is_default=true` авто-снимает default с других камней того же типа. Каждый `engine_id` в списках валидируется на существование.'
+      description: 'Required: `code`, `gen_content_type_id` (только метаданные камня). `is_default=true` авто-снимает default с других камней того же типа. Цены/движки задаются отдельно через операции.'
       requestBody:
         required: true
         content:
@@ -1409,6 +1409,43 @@ paths:
           content:
             application/json:
               schema: { type: object, properties: { deleted: { type: boolean }, id: { type: string, format: uuid } } }
+        '403': { description: Не superadmin }
+        '404': { description: Камень не найден }
+
+  /functions/v1/admin-gems/{id}/operations/{op}:
+    put:
+      tags: [Admin]
+      summary: Upsert операции камня (superadmin only)
+      description: 'Создать/обновить одну операцию камня (`gem_operations`): цена + тайминг + движки. Каждый `engine_id` валидируется против `ai_engines` (2026-07-11).'
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: op, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }, description: 'generate | improve | analyze | env_analyze | card_copywriting | card_generate | …' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GemOperationWritable' }
+      responses:
+        '200':
+          description: Операция сохранена
+          content:
+            application/json:
+              schema: { type: object, properties: { operation: { type: object } } }
+        '400': { description: Bad body / неизвестный engine_id / плохой op / не-UUID id }
+        '403': { description: Не superadmin }
+        '404': { description: Камень не найден }
+    delete:
+      tags: [Admin]
+      summary: Удалить операцию камня (superadmin only)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: op, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Удалено
+          content:
+            application/json:
+              schema: { type: object, properties: { deleted: { type: boolean }, gem_id: { type: string, format: uuid }, op: { type: string } } }
         '403': { description: Не superadmin }
         '404': { description: Камень не найден }
 
@@ -1675,6 +1712,74 @@ paths:
                     type: integer
 
   # ============================================================
+  # CARD (Карточка)
+  # ============================================================
+
+  /functions/v1/generate-card-copywriting:
+    post:
+      tags: [Generation]
+      summary: Копирайтер карточки (CARD) — текст + дизайн-бриф
+      description: |
+        Копирайтер контент-тайпа **КАРТОЧКА**. Превращает готовый анализ товара (+ опц. свободную заметку «О чём рассказать») в **структурный бриф**: продающий текст (headline/subheadline/features) + дизайн-направление. `verify_jwt=true`. **Бесплатно, только читает** (без записи в БД, без кэша — свежий результат на каждый ре-ролл кнопки «AI идея», прошлые варианты → `exclude`). `user_note` — сигнал намерения, не буквальный текст (verbatim-lock при явном требовании). Язык карточки = язык `user_note` (пусто → `locale`). Движок через операцию `card_copywriting` (text `gemini-2.5-flash`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [analysis_id]
+              properties:
+                analysis_id: { type: string, format: uuid, description: 'Товар (проверяется владелец).' }
+                user_note: { type: string, description: 'Ответ «О чём рассказать» (опц.; пусто = idea с нуля).' }
+                exclude: { type: array, items: { type: string }, description: 'Прошлые варианты, от которых уйти («AI идея»).' }
+                locale: { type: string, example: ru, description: 'Фолбэк-язык, если user_note пуст (default ru).' }
+      responses:
+        '200':
+          description: Бриф карточки
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  brief:
+                    type: object
+                    properties:
+                      language: { type: string, example: ru }
+                      copy:
+                        type: object
+                        properties:
+                          eyebrow: { type: string, nullable: true }
+                          headline: { type: string }
+                          subheadline: { type: string, nullable: true }
+                          features:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                label: { type: string }
+                                detail: { type: string }
+                                icon_hint: { type: string }
+                          badge: { type: object, nullable: true }
+                          footer_tagline: { type: string, nullable: true }
+                      design:
+                        type: object
+                        properties:
+                          font_personality: { type: string }
+                          palette: { type: string }
+                          mood: { type: string }
+                          layout_hint: { type: string }
+                      meta:
+                        type: object
+                        properties:
+                          emphasis: { type: string }
+                          locked_texts: { type: array, items: { type: string } }
+        '400': { description: Битый JSON / нет analysis_id }
+        '401': { description: Нет/невалидный JWT }
+        '403': { description: Анализ принадлежит другому юзеру }
+        '404': { description: analysis_id не найден }
+        '502': { description: Gemini ошибка / пустой / невалидный JSON }
+
+  # ============================================================
   # INSPIRE / STYLES
   # ============================================================
 
@@ -1722,10 +1827,15 @@ paths:
                         display_name: { type: string, example: Quartz }
                         description: { type: string }
                         content_type: { type: string, example: IMAGE }
-                        credit_generate: { type: integer, example: 4 }
-                        credit_improve: { type: integer, example: 2 }
-                        credit_analyze: { type: integer, example: 0 }
-                        credit_env_analyze: { type: integer, example: 1 }
+                        operations:
+                          type: array
+                          description: 'Цена + тайминг ПО ОПЕРАЦИИ (2026-07-11; заменяет плоские credit_*). Движки/note вырезаны. Стоимость генерации = сумма задействованных операций (generate + env_analyze при ФО).'
+                          items:
+                            type: object
+                            properties:
+                              op: { type: string, example: generate, description: 'generate | improve | analyze | env_analyze | card_copywriting | card_generate' }
+                              credit_price: { type: integer, example: 4 }
+                              charge_timing: { type: string, nullable: true, example: on_generate, description: 'on_generate | on_create | on_request | null (free)' }
                         is_default: { type: boolean }
                         sort_order: { type: integer }
                   content_types:
@@ -2864,8 +2974,8 @@ paths:
       description: |
         Тарифы для paywall. Публично читаемо (`is_active=true`). Источник правды для
         названий/кредитов/фич/badge/highlight. Цены НЕ здесь (веб — `subscription_skus`,
-        натив — стор). `≈ N photos` = `credits_monthly` ÷ мин. `credit_generate`
-        активных gems (см. `GET /gems`).
+        натив — стор). `≈ N photos` = `credits_monthly` ÷ мин. цена операции
+        `generate` активных gems (см. `GET /gems` → `operations`).
       parameters:
         - { in: query, name: select, schema: { type: string }, example: '*' }
         - { in: query, name: is_active, schema: { type: string }, example: eq.true }
@@ -3085,29 +3195,28 @@ components:
           type: string
           format: uuid
           description: 'Тип контента (IMAGE/CARD/VIDEO). Должен существовать.'
-        credit_generate: { type: integer, minimum: 0, description: 'Кредиты за generate (Quartz=4).' }
-        credit_improve: { type: integer, minimum: 0, description: 'Кредиты за improve (Quartz=2).' }
-        credit_analyze: { type: integer, minimum: 0, description: 'Кредиты за analyze (обычно 0).' }
-        credit_env_analyze: { type: integer, minimum: 0, description: 'Надбавка при генерации с ФО «Фото окружения» (Quartz=1). Списывается сверх credit_generate.' }
-        generate_engines:
-          type: array
-          items: { $ref: '#/components/schemas/EngineRef' }
-          description: 'Движки для generate (image), по приоритету + fallback. Каждый engine_id валидируется.'
-        improve_engines:
-          type: array
-          items: { $ref: '#/components/schemas/EngineRef' }
-          description: 'Движки для improve (image). Отдельно от generate_engines (2026-07-06).'
-        analyze_engines:
-          type: array
-          items: { $ref: '#/components/schemas/EngineRef' }
-          description: 'Движки для продуктового анализа (text-модель). С 2026-07-06 реально используются (не хардкод).'
-        env_analyze_engines:
-          type: array
-          items: { $ref: '#/components/schemas/EngineRef' }
-          description: 'Движки для анализа ФО «Фото окружения» (text-модель).'
         is_active: { type: boolean }
         sort_order: { type: integer }
         is_default: { type: boolean, description: 'true авто-снимает default у других камней того же типа.' }
+      # 2026-07-11: цены + движки сняты с камня → gem_operations (GemOperationWritable),
+      # правятся роутами PUT/DELETE /admin-gems/{id}/operations/{op}.
+
+    GemOperationWritable:
+      type: object
+      description: 'Операция камня (gem_operations, 2026-07-11): цена + тайминг + движки одной операции. Тело PUT /admin-gems/{id}/operations/{op}.'
+      required: [credit_price]
+      properties:
+        credit_price: { type: integer, minimum: 0, description: 'Кредиты с юзера за операцию (0 = free). Стоимость генерации = сумма операций.' }
+        charge_timing:
+          type: string
+          nullable: true
+          enum: [on_generate, on_create, on_request]
+          description: 'Когда списывать (платные). null = free.'
+        note: { type: string, nullable: true, description: 'Внутренняя заметка про подсчёт.' }
+        engines:
+          type: array
+          items: { $ref: '#/components/schemas/EngineRef' }
+          description: 'Fallback-движки операции (priority 1 = основной). Каждый engine_id валидируется. Внутреннее — /gems вырезает.'
 
     Gem:
       description: 'Камень (полный объект ответа admin). display_name/description — объекты {en,ru,hy}.'
@@ -3131,10 +3240,8 @@ components:
         cost_unit:
           type: string
           enum: [per_image, per_second, per_1k_tokens, per_request]
-        token_generate: { type: integer, description: 'Родной токен-хинт движка (подсказка при создании камня).' }
-        token_improve: { type: integer }
-        token_analyze: { type: integer }
-        token_env_analyze: { type: integer, description: 'Токен-хинт под ФО-анализ (только подсказка, не списывается).' }
+        # 2026-07-11: per-op токен-хинты (token_*) удалены — движок держит только
+        # реальные факты вендора; операции/цены живут на камне (gem_operations).
         api_key_name: { type: string, description: 'ИМЯ Edge-секрета (Deno.env), НЕ значение ключа.' }
         valid_until: { type: string, format: date, description: 'YYYY-MM-DD; UI предупреждает о скором EOL.' }
         notes: { type: string }
@@ -3551,7 +3658,7 @@ components:
           description: 'Заполняется при `status=failed`. Для Gemini ошибок — содержит первые 500 байт response body.'
         credits_charged:
           type: integer
-          description: 'Списанные кредиты = `credit_generate` камня (Quartz = 4). До 2026-06-16 всегда 1.'
+          description: 'Списанные кредиты = цена операции `generate` камня (Quartz = 4). До 2026-06-16 всегда 1.'
         created_at:
           type: string
           format: date-time
