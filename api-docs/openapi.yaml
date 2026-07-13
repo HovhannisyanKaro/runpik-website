@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Runpik Backend API
-  version: '2026-07-11'
+  version: '2026-07-13'
   description: |
     AI-сервис продуктовой фотографии. Документация описывает client-facing
     API контракт: Edge Functions, PostgREST endpoints для прямого доступа
@@ -1720,7 +1720,7 @@ paths:
       tags: [Generation]
       summary: Копирайтер карточки (CARD) — текст + дизайн-бриф
       description: |
-        Копирайтер контент-тайпа **КАРТОЧКА**. Превращает готовый анализ товара (+ опц. свободную заметку «О чём рассказать») в **структурный бриф**: продающий текст (headline/subheadline/features) + дизайн-направление. `verify_jwt=true`. **Бесплатно, только читает** (без записи в БД, без кэша — свежий результат на каждый ре-ролл кнопки «AI идея», прошлые варианты → `exclude`). `user_note` — сигнал намерения, не буквальный текст (verbatim-lock при явном требовании). Язык карточки = язык `user_note` (пусто → `locale`). Движок через операцию `card_copywriting` (text `gemini-2.5-flash`).
+        Копирайтер контент-тайпа **КАРТОЧКА** — кнопка «AI идея» (по нажатию, не автопрефилл). Превращает анализ товара (+ опц. свободную заметку «О чём рассказать») в **структурный бриф** (headline/subheadline/features + дизайн) И короткий plain-text **`suggestion`** для поля. `verify_jwt=true`. **Бесплатно, только читает** (без записи в БД, без кэша; прошлые варианты → `exclude`, высокая температура). `user_note` — сигнал намерения (verbatim-lock при явном требовании). Язык = язык `user_note` (пусто → `locale`). Тот же копирайтер вызывается ВНУТРИ `/generate-card` на генерации (тюнинг). Движок — операция `card_copywriting` CARD-камня (amber, text `gemini-2.5-flash`).
       requestBody:
         required: true
         content:
@@ -1773,11 +1773,65 @@ paths:
                         properties:
                           emphasis: { type: string }
                           locked_texts: { type: array, items: { type: string } }
+                  suggestion:
+                    type: string
+                    description: 'Короткий plain-text (строки через \n) для поля «О чём рассказать». Клиент кладёт в поле именно это, не brief.'
+                    example: "Элегантный фиолетовый цвет\nМногоярусная юбка\nТонкие бретели"
         '400': { description: Битый JSON / нет analysis_id }
         '401': { description: Нет/невалидный JWT }
         '403': { description: Анализ принадлежит другому юзеру }
         '404': { description: analysis_id не найден }
         '502': { description: Gemini ошибка / пустой / невалидный JSON }
+
+  /functions/v1/generate-card:
+    post:
+      tags: [Generation]
+      summary: Генерация картинки карточки (CARD, Вариант A)
+      description: |
+        Рендер картинки карточки (content type CARD, **Вариант A** — текст запекается в изображение; идентичность товара сохраняется). Близнец `/generate` с текстовым слоем. `verify_jwt=true`. **Стоимость = операция `card_generate` CARD-камня (amber = 5), charge-on-success** (при сбое кредиты не списываются). Пишет строку в `generations` с `content_type='CARD'` + `card_brief`. Текст берётся из `user_note` — на генерации прогоняется копирайтер (тюнинг; пусто → придумывает) → бриф → рендер; либо клиент шлёт готовый `brief` (если поле не менялось после «AI идея»). Презентация товара — из `shot_type`; цвета текста динамические. Mock (`RUNPIK_MOCK_GENERATION`) поддержан.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [analysis_id]
+              properties:
+                analysis_id: { type: string, format: uuid, description: 'Товар (переиспользует продуктовый /analyze).' }
+                user_note: { type: string, description: 'Текст поля «О чём рассказать» (пусто → копирайтер придумывает).' }
+                brief: { type: object, description: 'Готовый бриф (пропускает копирайтер) — слать, когда поле не менялось после «AI идея».' }
+                shot_type: { type: string, description: 'Ракурс (презентация товара).' }
+                lighting: { type: string, enum: [daylight, studio, sunset, rim] }
+                aspect_ratio: { type: string, enum: ['16:9', '4:3', '1:1', '3:4', '9:16'], default: '3:4' }
+                locale: { type: string, example: ru, description: 'Фолбэк-язык копирайтера, если user_note пуст.' }
+                gem_id: { type: string, format: uuid, description: 'Не передавать — берётся дефолтный CARD-камень (amber).' }
+                project_id: { type: string, format: uuid }
+                product_name: { type: string }
+      responses:
+        '200':
+          description: Карточка сгенерирована
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generation_id: { type: string, format: uuid }
+                  analysis_id: { type: string, format: uuid }
+                  content_type: { type: string, example: CARD }
+                  output_url: { type: string, description: 'Signed URL, TTL 1 час.' }
+                  output_path: { type: string }
+                  expires_in_seconds: { type: integer, example: 3600 }
+                  warnings: { type: array, items: { type: string } }
+                  credits_remaining: { type: integer }
+                  mock: { type: boolean, description: 'Только при RUNPIK_MOCK_GENERATION.' }
+        '400': { description: Битый JSON / нет analysis_id / ошибка сборки промпта }
+        '401': { description: Нет/невалидный JWT }
+        '402': { description: 'Недостаточно кредитов (card_generate; amber=5). Body {error, balance, required}.' }
+        '403': { description: Анализ принадлежит другому юзеру }
+        '404': { description: analysis_id не найден / входное фото пропало }
+        '422': { description: 'verdict recheck (is_suitable.verdict=false). Body {error, blockers, analysis_id}.' }
+        '500': { description: env vars / DB / upload }
+        '502': { description: Gemini (копирайтер или image) }
 
   # ============================================================
   # INSPIRE / STYLES
@@ -1794,7 +1848,7 @@ paths:
 
         **`generate_engines` / `analyze_engines` НИКОГДА не возвращаются** (внутреннее, как `style_prompt`). Возвращаются только активные камни активных типов (CARD/VIDEO выключены). Цена операции = `credit_*` камня в кредитах.
 
-        **Frontend:** фильтруй `models` по `content_type` (сейчас `IMAGE`), предвыбирай `is_default`, при генерации передавай `models[i].id` как `gem_id` в `/generate`.
+        **Frontend:** фильтруй `gems` по `content_type` (`IMAGE` и `CARD`), предвыбирай `is_default`. Пока по одному камню на тип → `gem_id` не передавай (берётся дефолтный камень типа); при нескольких камнях появится пикер. Цена = нужная операция из `operations` (напр. `generate` для фото, `card_generate` для карточки).
       security: []
       parameters:
         - in: query
@@ -1841,7 +1895,7 @@ paths:
                   content_types:
                     type: object
                     additionalProperties: { type: string }
-                    description: 'Локализованные label'' типов, у которых есть ≥1 камень. Напр. `{ "IMAGE": "Image" }`.'
+                    description: 'Локализованные label типов, у которых есть ≥1 камень. Камни — по content type (Quartz=IMAGE, amber=CARD), поэтому теперь `{ "IMAGE": "…", "CARD": "…" }`. Цена карточки = операция card_generate CARD-камня. Пока один камень на тип → gem_id не слать (берётся дефолтный).'
                   locale: { type: string }
                   fallback_used: { type: boolean }
                   total: { type: integer }
@@ -3599,11 +3653,19 @@ components:
 
     Generation:
       type: object
-      description: 'Одна попытка генерации (успех или сбой). Создаётся в `/generate`.'
+      description: 'Одна попытка генерации (успех или сбой). Создаётся в `/generate` (IMAGE) или `/generate-card` (CARD).'
       properties:
         id:
           type: string
           format: uuid
+        content_type:
+          type: string
+          enum: [IMAGE, CARD]
+          description: 'Дискриминатор: IMAGE (дефолт) или CARD. Для грид Works (фильтр карточки vs фото). Добавлено 2026-07-13.'
+        card_brief:
+          type: object
+          nullable: true
+          description: 'Для CARD: использованный бриф (copy+design). NULL для IMAGE.'
         user_id:
           type: string
           format: uuid
