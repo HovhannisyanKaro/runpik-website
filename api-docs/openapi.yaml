@@ -10,17 +10,17 @@ info:
     ## Архитектура
 
     - **Supabase Cloud** (project ref `wnbtsqfdlbjwtetppdng`, регион `eu-central-1` Frankfurt)
-    - **8 Edge Functions:** `/analyze`, `/generate`, `/shot-types`, `/faq`, `/delete-project`, `/delete-generation`, `/admin`, `/process-account-deletions`
+    - **8 Edge Functions:** `/product-analyze`, `/image-generate`, `/shot-types`, `/faq`, `/delete-project`, `/delete-generation`, `/admin`, `/process-account-deletions`
     - **Google Gemini API** — `gemini-2.5-flash` для vision/text, `gemini-2.5-flash-image` для генерации
     - **Storage buckets:** `inputs` (приватный, 10 MiB max), `outputs` (приватный, signed URL TTL 1 час)
 
     ## Двухстадийный pipeline генерации
 
     1. Frontend загружает фото в `inputs/{user_id}/...` Storage bucket
-    2. `POST /functions/v1/analyze` → Gemini Flash text возвращает `ProductAnalysis` JSON + кеширует
+    2. `POST /functions/v1/product-analyze` → Gemini Flash text возвращает `ProductAnalysis` JSON + кеширует
     3. Frontend проверяет `analysis.is_suitable.verdict` — если `false`, показывает blockers
     4. Frontend дёргает `GET /functions/v1/shot-types` для рендера UI выбора типа кадра
-    5. `POST /functions/v1/generate` → Gemini Flash Image генерирует output, кладёт в `outputs/{user_id}/...`, возвращает signed URL (TTL 1 час)
+    5. `POST /functions/v1/image-generate` → Gemini Flash Image генерирует output, кладёт в `outputs/{user_id}/...`, возвращает signed URL (TTL 1 час)
 
     ## Аутентификация
 
@@ -38,7 +38,7 @@ info:
 
     ## Mock mode
 
-    Real AI-генерация **включена** (с 2026-05-31): Gemini Flash Image billing активен, mock выключен (`RUNPIK_MOCK_GENERATION=false`). `/generate` и `/improve-generation` делают настоящую генерацию/edit. Mock — dev-only тумблер; в prod-ответах поля `mock` нет (если видишь `"mock": true` — mock временно включён для QA).
+    Real AI-генерация **включена** (с 2026-05-31): Gemini Flash Image billing активен, mock выключен (`RUNPIK_MOCK_GENERATION=false`). `/image-generate` и `/image-improve` делают настоящую генерацию/edit. Mock — dev-only тумблер; в prod-ответах поля `mock` нет (если видишь `"mock": true` — mock временно включён для QA).
 
     ## Подробная narrative-style документация
 
@@ -504,7 +504,7 @@ paths:
 
         **Analyses survive** — их `project_id` ставится в NULL через `ON DELETE SET NULL`. Cache analyses (per `user_id + image_hash`) переживает удаление project'а — это интенционально (Gemini вызовы дорогие).
 
-        **Invariant ">= 1 project":** если после удаления у юзера 0 projects, backend **автоматически** создаёт новый default project с именем = сегодняшняя UTC дата (response содержит `new_default_project`). Это значит `/analyze` и `/generate` могут trust invariant и не имеют fallback логики "у юзера 0 projects".
+        **Invariant ">= 1 project":** если после удаления у юзера 0 projects, backend **автоматически** создаёт новый default project с именем = сегодняшняя UTC дата (response содержит `new_default_project`). Это значит `/product-analyze` и `/image-generate` могут trust invariant и не имеют fallback логики "у юзера 0 projects".
 
         **Не используй прямой PostgREST DELETE на projects** — он удалит DB row но оставит orphaned blobs в Storage + сломает invariant.
       requestBody:
@@ -607,12 +607,12 @@ paths:
         '409':
           description: 'Нельзя удалить оригинал (v0) пока есть improvements. Body содержит `code: CANNOT_DELETE_ORIGINAL_WITH_IMPROVEMENTS`.'
 
-  /functions/v1/improve-generation:
+  /functions/v1/image-improve:
     post:
       tags: [AI Pipeline]
       summary: Улучшить генерацию (новая версия)
       description: |
-        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. **Биллинг (с 2026-06-16; операции 2026-07-11):** списывается цена операции `improve` камня в кредитах (Quartz = 3, `gem_operations`) через `spend_credits` **по факту успеха**; камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный IMAGE). При сбое строка версии удаляется, кредиты не списываются.
+        **Фича «Improvements».** Итеративно улучшает существующую генерацию по text-промпту, создавая **новую версию** в той же группе. **Биллинг (с 2026-06-16; операции 2026-07-11):** списывается цена операции `image-improve` камня в кредитах (Quartz = 3, `gem_operations`) через `spend_credits` **по факту успеха**; камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный IMAGE). При сбое строка версии удаляется, кредиты не списываются.
 
         Каждая версия — обычная строка `generations`: `root_generation_id` (группа), `version_index` (0=оригинал, 1=V1…), `improvement_prompt`, `source_generation_id` (откуда улучшали). MVP **linear**: новая версия = `max(version_index)+1`.
 
@@ -742,18 +742,18 @@ paths:
   # AI PIPELINE
   # ============================================================
 
-  /functions/v1/analyze:
+  /functions/v1/product-analyze:
     post:
       tags: [AI Pipeline]
       summary: Stage 1 — анализ загруженного фото
       description: |
-        **Первый шаг двухстадийного pipeline.** Вызывает Gemini Flash (vision) для распознавания продукта на фото и возвращает структурированный `ProductAnalysis` JSON, который потом используется в `/generate`.
+        **Первый шаг двухстадийного pipeline.** Вызывает Gemini Flash (vision) для распознавания продукта на фото и возвращает структурированный `ProductAnalysis` JSON, который потом используется в `/image-generate`.
 
         **Бесплатный** — кредиты не списываются.
 
         **Кешируется** по ключу `(user_id, image_hash, prompt_version)`. Image_hash — SHA-256 байтов файла. Повторный вызов с тем же image (например юзер пробует ещё раз с другими параметрами) возвращает мгновенно с `cached: true`, без обращения к Gemini.
 
-        **Critical: проверяй `analysis.is_suitable.verdict` перед /generate.** Если `verdict = false` — показывай экран "это изображение не подходит" с `is_suitable.blockers`, не вызывай `/generate` (там 422). `/analyze` всегда возвращает 200 при успешном вызове Gemini (verdict — бизнес-результат, не HTTP ошибка).
+        **Critical: проверяй `analysis.is_suitable.verdict` перед /generate.** Если `verdict = false` — показывай экран "это изображение не подходит" с `is_suitable.blockers`, не вызывай `/image-generate` (там 422). `/product-analyze` всегда возвращает 200 при успешном вызове Gemini (verdict — бизнес-результат, не HTTP ошибка).
 
         **Frontend flow:**
         1. Загрузи фото в Storage: `inputs/{user_id}/{filename}.jpg`
@@ -785,7 +785,7 @@ paths:
                     Если `true`, обходит кеш `analyses` и заново зовёт Gemini. Используется когда хочешь пересмотреть анализ.
       responses:
         '200':
-          description: Анализ успешен. **ВАЖНО — проверяй `analysis.is_suitable.verdict`** прежде чем переходить к `/generate`.
+          description: Анализ успешен. **ВАЖНО — проверяй `analysis.is_suitable.verdict`** прежде чем переходить к `/image-generate`.
           content:
             application/json:
               schema:
@@ -794,7 +794,7 @@ paths:
                   analysis_id:
                     type: string
                     format: uuid
-                    description: UUID строки в `analyses`. Передавай в `/generate`.
+                    description: UUID строки в `analyses`. Передавай в `/image-generate`.
                   analysis:
                     $ref: '#/components/schemas/ProductAnalysis'
                   cached:
@@ -809,22 +809,22 @@ paths:
         '502':
           description: Gemini Flash text fetch не удался / пустой ответ / невалидный JSON
 
-  /functions/v1/generate:
+  /functions/v1/image-generate:
     post:
       tags: [AI Pipeline]
       summary: Stage 2 — генерация изображения
       description: |
-        **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/analyze`, строит Stage 2 prompt, прогоняет через движки выбранного **камня** (`gems`) с priority+retry+fallback, загружает output в `outputs` bucket, возвращает signed URL.
+        **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/product-analyze`, строит Stage 2 prompt, прогоняет через движки выбранного **камня** (`gems`) с priority+retry+fallback, загружает output в `outputs` bucket, возвращает signed URL.
 
-        **Биллинг (с 2026-06-16; операции 2026-07-11):** списывается цена операции `generate` камня в **кредитах** (Quartz = **4**, `gem_operations`); при ФО сверху операция `env_analyze` (стоимость = сумма операций). Камень — поле `gem_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации кредиты НЕ списываются** (refund не нужен — списания просто нет).
+        **Биллинг (kebab-операции + платные опции с 2026-07-14):** списывается цена операции `image-generate` камня в **кредитах** (Quartz = **4**, `gem_operations`); при ФО сверху **платная опция** `environment` камня (`gem_paid_options`, стоимость = базовая операция + сумма платных опций). Камень — поле `gem_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации кредиты НЕ списываются** (refund не нужен — списания просто нет).
 
-        **ФО-надбавка (с 2026-07-06):** при `environment_id` сверху списывается `credit_env_analyze` камня (Quartz = **1**) → итог **5**, отдельной строкой в леджере (`operation=env_analyze`). Баланс гейтится на полную сумму.
+        **ФО-надбавка (платная опция `environment` с 2026-07-14):** при `environment_id` сверху списывается платная опция `environment` камня из `gem_paid_options` (Quartz = **1**) → итог **5**, отдельной строкой в леджере (`metadata.paid_option=environment`). Баланс гейтится на полную сумму. Цена отдаётся клиенту в `GET /gems` (`gems[].paid_options`).
 
         **Длительная операция:** 8 сек в mock mode, 10-30 сек реальный Gemini. Показывай loading state с прогрессом.
 
-        **Verdict recheck:** если `analysis.is_suitable.verdict = false` — возвращает 422 **без charge'а кредита**. Defense-in-depth на случай если frontend пропустил blockers в `/analyze` response.
+        **Verdict recheck:** если `analysis.is_suitable.verdict = false` — возвращает 422 **без charge'а кредита**. Defense-in-depth на случай если frontend пропустил blockers в `/product-analyze` response.
 
-        **Real generation LIVE (с 2026-05-31):** billing включён, mock выключен — `/generate` делает настоящую AI-генерацию (10-30s). Mock — dev-only тумблер; в prod-ответах поля `mock` нет.
+        **Real generation LIVE (с 2026-05-31):** billing включён, mock выключен — `/image-generate` делает настоящую AI-генерацию (10-30s). Mock — dev-only тумблер; в prod-ответах поля `mock` нет.
 
         **Output URL TTL:** 1 час. Сохрани `output_path` чтобы перегенерировать signed URL потом через Storage SDK.
       requestBody:
@@ -838,7 +838,7 @@ paths:
                 analysis_id:
                   type: string
                   format: uuid
-                  description: UUID анализа из `/analyze` response
+                  description: UUID анализа из `/product-analyze` response
                 shot_type:
                   type: string
                   description: |
@@ -872,12 +872,12 @@ paths:
                   maxLength: 60
                   nullable: true
                   description: |
-                    Имя товара (заголовок фото), зафиксированное на Create — обычно отредактированное `analysis.product.product_name` из `/analyze`. Optional. Санитизируется (strip control chars, trim, cap 60). Пустое/отсутствует → null (фронт показывает fallback). Пишется в `generations.product_name`. **Photo-level:** Improve-версии наследуют, переименование позже синхронится по всей группе версий (PATCH `/rest/v1/generations`). В Stage 2 НЕ уходит. (2026-06-07)
+                    Имя товара (заголовок фото), зафиксированное на Create — обычно отредактированное `analysis.product.product_name` из `/product-analyze`. Optional. Санитизируется (strip control chars, trim, cap 60). Пустое/отсутствует → null (фронт показывает fallback). Пишется в `generations.product_name`. **Photo-level:** Improve-версии наследуют, переименование позже синхронится по всей группе версий (PATCH `/rest/v1/generations`). В Stage 2 НЕ уходит. (2026-06-07)
                 gem_id:
                   type: string
                   format: uuid
                   description: |
-                    Какой «камень» (`gems`) использовать. Optional — NULL → дефолтный камень для IMAGE. Должен быть UUID активного камня. Цена генерации = операция `generate` камня (Quartz = 4 кредита, `gem_operations`). Пишется в `generations.gem_id`; реально отработавший движок — в `generations.engine_id`. (2026-06-16)
+                    Какой «камень» (`gems`) использовать. Optional — NULL → дефолтный камень для IMAGE. Должен быть UUID активного камня. Цена генерации = операция `image-generate` камня (Quartz = 4 кредита, `gem_operations`). Пишется в `generations.gem_id`; реально отработавший движок — в `generations.engine_id`. (2026-06-16)
       responses:
         '200':
           description: 'Generation успешна. Поле `mock: true` присутствует если backend в mock-режиме.'
@@ -1001,13 +1001,13 @@ paths:
       description: |
         Анализирует фото-референс сцены и сохраняет переиспользуемое окружение. Анализатор извлекает описание **только окружения** (поверхности, фон, свет, палитра, настроение), **вычищая любой чужой товар и весь текст/брендинг** (напр. скриншот с маркетплейса).
 
-        **Бесплатно** (как `/analyze`) — кредиты/Gem не трогает. **`scene_prompt` наружу НЕ возвращается** (backend-only). Непригодное фото (нет пригодного окружения) → **422**, окружение НЕ сохраняется.
+        **Бесплатно** (как `/product-analyze`) — кредиты/Gem не трогает. **`scene_prompt` наружу НЕ возвращается** (backend-only). Непригодное фото (нет пригодного окружения) → **422**, окружение НЕ сохраняется.
 
         **Flow:** сначала залей фото в bucket `environments` (path `{user_id}/{filename}`) через Storage SDK, затем пошли путь сюда.
 
         **Переименование/теги** — через PostgREST PATCH на `environments` (писать можно только `name`, `tags`), а не через эту функцию.
 
-        **Scope:** `/generate` пока `environment_id` не потребляет (wiring — следующий слайс).
+        **Scope:** `/image-generate` пока `environment_id` не потребляет (wiring — следующий слайс).
       requestBody:
         required: true
         content:
@@ -1078,17 +1078,17 @@ paths:
       tags: [AI Pipeline]
       summary: Preview финального Stage 2 промпта (testing only)
       description: |
-        **Admin debug helper.** Возвращает финальный Stage 2 промпт, который `/generate` **отправил бы** в Gemini Image — без списания кредита, генерации картинки, вызова Gemini, записи в `generations` или Storage. Опционально принимает **`scene_prompt`** — текст ФО-оверлея (тот же, что использует `/generate`; из `POST /environments` или `preview-environment-prompt`) → подмешивается как **ENVIRONMENT OVERLAY** (ФО компонуется с `shot_type` + `lighting`). Текст, а не фото; без повторного анализа.
+        **Admin debug helper.** Возвращает финальный Stage 2 промпт, который `/image-generate` **отправил бы** в Gemini Image — без списания кредита, генерации картинки, вызова Gemini, записи в `generations` или Storage. Опционально принимает **`scene_prompt`** — текст ФО-оверлея (тот же, что использует `/image-generate`; из `POST /environments` или `preview-environment-prompt`) → подмешивается как **ENVIRONMENT OVERLAY** (ФО компонуется с `shot_type` + `lighting`). Текст, а не фото; без повторного анализа.
 
-        Реюзит ту же детерминированную `buildStage2Prompt()`, что `/generate` использует на шаге 12 → preview-промпт **байт-в-байт совпадает** с продакшн-промптом при тех же входах.
+        Реюзит ту же детерминированную `buildStage2Prompt()`, что `/image-generate` использует на шаге 12 → preview-промпт **байт-в-байт совпадает** с продакшн-промптом при тех же входах.
 
-        **Назначение:** сфоткать реальный продукт, прогнать `/analyze` (free), получить промпт, скопировать руками в бесплатную веб-версию Gemini Image Gen и итерировать за $0. Workaround пока Gemini Flash Image billing не включён.
+        **Назначение:** сфоткать реальный продукт, прогнать `/product-analyze` (free), получить промпт, скопировать руками в бесплатную веб-версию Gemini Image Gen и итерировать за $0. Workaround пока Gemini Flash Image billing не включён.
 
         **Не часть клиентского flow** — Flutter app его не вызывает. `aspect_ratio` не принимается (не часть текста промпта — в продакшне это отдельный `imageConfig.aspectRatio`).
 
         🔒 **Admin-only (2026-07-03):** `requireAdmin` — нужна роль `curator`/`admin`/`superadmin` (любой не-`user`). Раньше был доступен любому аутентифицированному юзеру; логика построения промпта и ответ не изменились, добавлен только gate.
 
-        **Verdict:** промпт строится независимо от `is_suitable.verdict` (в отличие от `/generate`, который вернул бы 422). Verdict отдаётся в ответе.
+        **Verdict:** промпт строится независимо от `is_suitable.verdict` (в отличие от `/image-generate`, который вернул бы 422). Verdict отдаётся в ответе.
       requestBody:
         required: true
         content:
@@ -1100,7 +1100,7 @@ paths:
                 analysis_id:
                   type: string
                   format: uuid
-                  description: UUID анализа из `/analyze` response
+                  description: UUID анализа из `/product-analyze` response
                 shot_type:
                   type: string
                   description: 'Slug типа кадра. Optional — если NULL, используется `analysis.regeneration_guidance.recommended_shot_type`.'
@@ -1108,17 +1108,17 @@ paths:
                 user_text:
                   type: string
                   maxLength: 300
-                  description: 'Свободный текст. Проходит тот же `sanitizeUserText`, что и `/generate`.'
+                  description: 'Свободный текст. Проходит тот же `sanitizeUserText`, что и `/image-generate`.'
                 lighting:
                   $ref: '#/components/schemas/Lighting'
                 style_id:
                   type: string
                   format: uuid
-                  description: 'UUID стиля (любой publish-статус — это testing tool). Optional. Подмешивает STYLE OVERLAY в превью-промпт так же, как в `/generate`. Взаимоисключимо со `scene_prompt` (оба → 400).'
+                  description: 'UUID стиля (любой publish-статус — это testing tool). Optional. Подмешивает STYLE OVERLAY в превью-промпт так же, как в `/image-generate`. Взаимоисключимо со `scene_prompt` (оба → 400).'
                 scene_prompt:
                   type: string
                   maxLength: 4000
-                  description: 'Текст ФО-оверлея (тот же, что использует `/generate`; из `POST /environments` или `preview-environment-prompt`). Optional. Подмешивается как ENVIRONMENT OVERLAY. ФО компонуется с `shot_type` + `lighting`. Фото не нужно — только текст.'
+                  description: 'Текст ФО-оверлея (тот же, что использует `/image-generate`; из `POST /environments` или `preview-environment-prompt`). Optional. Подмешивается как ENVIRONMENT OVERLAY. ФО компонуется с `shot_type` + `lighting`. Фото не нужно — только текст.'
       responses:
         '200':
           description: Финальный Stage 2 промпт + метаданные анализа
@@ -1182,7 +1182,7 @@ paths:
       description: |
         **Admin-only отладочный инструмент** — сиблинг `/preview-prompt`, но для Фото окружения (`/functions/v1/environments`). Прогоняет фото сцены через **тот же анализатор**, что боевой `POST /environments` (общий код `_shared/environment-analysis.ts` — превью == прод), и возвращает извлечённый `scene_prompt` (текст ENVIRONMENT OVERLAY).
 
-        **Ничего не сохраняет** (ни строки `environments`, ни кредитов, ни Storage). Бесплатно (как `/analyze` и `/preview-prompt`).
+        **Ничего не сохраняет** (ни строки `environments`, ни кредитов, ни Storage). Бесплатно (как `/product-analyze` и `/preview-prompt`).
 
         🔒 **Gate:** `requireAdmin` — любая elevated-роль (`curator`/`admin`/`superadmin`). Обычный `user` → 403.
 
@@ -1266,7 +1266,7 @@ paths:
       tags: [AI Pipeline]
       summary: Каталог 28 типов кадров с i18n labels
       description: |
-        Публичный read-only endpoint — каталог 28 shot types (7 категорий × 4 типа в каждой) с локализованными labels. Используется фронтом для рендера Shot Type Selection screen после `/analyze`.
+        Публичный read-only endpoint — каталог 28 shot types (7 категорий × 4 типа в каждой) с локализованными labels. Используется фронтом для рендера Shot Type Selection screen после `/product-analyze`.
 
         **No auth required** — `verify_jwt = false`. Cache `public, max-age=300` (5 мин edge CDN; снижено с 1ч в 2026-06-07).
 
@@ -1419,7 +1419,7 @@ paths:
       description: 'Создать/обновить одну операцию камня (`gem_operations`): цена + тайминг + движки. Каждый `engine_id` валидируется против `ai_engines` (2026-07-11).'
       parameters:
         - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
-        - { in: path, name: op, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }, description: 'generate | improve | analyze | env_analyze | card_copywriting | card_generate | …' }
+        - { in: path, name: op, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9-]*$' }, description: 'kebab-case op из реестра operations: image-generate | image-improve | product-analyze | environment-analyze | card-generate | card-copywriting | card-improve' }
       requestBody:
         required: true
         content:
@@ -1448,6 +1448,109 @@ paths:
               schema: { type: object, properties: { deleted: { type: boolean }, gem_id: { type: string, format: uuid }, op: { type: string } } }
         '403': { description: Не superadmin }
         '404': { description: Камень не найден }
+
+  /functions/v1/admin-gems/{id}/paid-options/{code}:
+    put:
+      tags: [Admin]
+      summary: Привязать/задать цену платной опции на камне (superadmin only)
+      description: 'Привязать платную опцию («Платная опция») к камню и задать её цену В КРЕДИТАХ для этого камня (`gem_paid_options`, upsert). Опция должна существовать в каталоге (`/admin-paid-options`). Цена отдаётся клиенту в `GET /gems`. Audit `gem.paid_option_upsert`. (2026-07-14)'
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: code, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }, description: 'например environment' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [credit_price], properties: { credit_price: { type: integer, minimum: 0, example: 1 } } }
+      responses:
+        '200': { description: Привязано }
+        '400': { description: Bad body / неизвестная платная опция (нет в каталоге) / не-UUID id }
+        '403': { description: Не superadmin }
+        '404': { description: Камень не найден }
+    delete:
+      tags: [Admin]
+      summary: Отвязать платную опцию от камня (superadmin only)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: code, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Отвязано }
+        '403': { description: Не superadmin }
+        '404': { description: Камень не найден }
+
+  /functions/v1/admin-paid-options:
+    get:
+      tags: [Admin]
+      summary: Каталог платных опций (superadmin only)
+      description: |
+        CRUD каталога **платных опций** («Платные опции») — опциональных платных фич, которые юзер добавляет к генерации (`environment`/ФО сейчас; `design_reference`/ДР позже). Каталог = только ОПРЕДЕЛЕНИЕ (`code`, `label`, `note`); цена задаётся ПО КАМНЮ через `PUT /admin-gems/{id}/paid-options/{code}`. **Доступ: только `superadmin`**. Audit `paid_option.*`. (2026-07-14)
+      responses:
+        '200':
+          description: Каталог
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paid_options:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { type: string, example: environment }
+                        label: { type: object, description: '{en,ru}' }
+                        note: { type: string, nullable: true }
+                        is_active: { type: boolean }
+                        gem_count: { type: integer, description: 'к скольким камням привязана (для guard удаления)' }
+                  total: { type: integer }
+        '403': { description: Не superadmin }
+    post:
+      tags: [Admin]
+      summary: Создать платную опцию (superadmin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, label]
+              properties:
+                code: { type: string, pattern: '^[a-z][a-z0-9_]*$', example: design_reference }
+                label: { type: object, description: '{en,ru}' }
+                note: { type: string, nullable: true }
+      responses:
+        '201': { description: Создано }
+        '400': { description: Bad code/label }
+        '403': { description: Не superadmin }
+        '409': { description: Опция с таким code уже есть }
+
+  /functions/v1/admin-paid-options/{code}:
+    patch:
+      tags: [Admin]
+      summary: Обновить платную опцию (superadmin only)
+      parameters:
+        - { in: path, name: code, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { label: { type: object }, note: { type: string, nullable: true }, is_active: { type: boolean } } }
+      responses:
+        '200': { description: Обновлено }
+        '400': { description: Нет валидных полей }
+        '403': { description: Не superadmin }
+        '404': { description: Не найдено }
+    delete:
+      tags: [Admin]
+      summary: Удалить платную опцию (superadmin only)
+      description: 'Запрещено (409), пока опция привязана хотя бы к одному камню — сначала отвяжи её от всех камней.'
+      parameters:
+        - { in: path, name: code, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Удалено }
+        '403': { description: Не superadmin }
+        '404': { description: Не найдено }
+        '409': { description: 'Опция привязана к N камням (`{error, gem_count}`)' }
 
   /functions/v1/admin-ai-engines:
     get:
@@ -1715,12 +1818,12 @@ paths:
   # CARD (Карточка)
   # ============================================================
 
-  /functions/v1/generate-card-copywriting:
+  /functions/v1/card-copywriting:
     post:
       tags: [Generation]
       summary: Копирайтер карточки (CARD) — текст + дизайн-бриф
       description: |
-        Копирайтер контент-тайпа **КАРТОЧКА** — кнопка «AI идея» (по нажатию, не автопрефилл). Превращает анализ товара (+ опц. свободную заметку «О чём рассказать») в **структурный бриф** (headline/subheadline/features + дизайн) И короткий plain-text **`suggestion`** для поля. `verify_jwt=true`. **Бесплатно, только читает** (без записи в БД, без кэша; прошлые варианты → `exclude`, высокая температура). `user_note` — сигнал намерения (verbatim-lock при явном требовании). Язык = язык `user_note` (пусто → `locale`). Тот же копирайтер вызывается ВНУТРИ `/generate-card` на генерации (тюнинг). Движок — операция `card_copywriting` CARD-камня (amber, text `gemini-2.5-flash`).
+        Копирайтер контент-тайпа **КАРТОЧКА** — кнопка «AI идея» (по нажатию, не автопрефилл). Превращает анализ товара (+ опц. свободную заметку «О чём рассказать») в **структурный бриф** (headline/subheadline/features + дизайн) И короткий plain-text **`suggestion`** для поля. `verify_jwt=true`. **Бесплатно, только читает** (без записи в БД, без кэша; прошлые варианты → `exclude`, высокая температура). `user_note` — сигнал намерения (verbatim-lock при явном требовании). Язык = язык `user_note` (пусто → `locale`). Тот же копирайтер вызывается ВНУТРИ `/card-generate` на генерации (тюнинг). Движок — операция `card-copywriting` CARD-камня (amber, text `gemini-2.5-flash`).
       requestBody:
         required: true
         content:
@@ -1783,12 +1886,12 @@ paths:
         '404': { description: analysis_id не найден }
         '502': { description: Gemini ошибка / пустой / невалидный JSON }
 
-  /functions/v1/generate-card:
+  /functions/v1/card-generate:
     post:
       tags: [Generation]
       summary: Генерация картинки карточки (CARD, Вариант A)
       description: |
-        Рендер картинки карточки (content type CARD, **Вариант A** — текст запекается в изображение; идентичность товара сохраняется). Близнец `/generate` с текстовым слоем. `verify_jwt=true`. **Стоимость = операция `card_generate` CARD-камня (amber = 5), charge-on-success** (при сбое кредиты не списываются). Пишет строку в `generations` с `content_type='CARD'` + `card_brief`. Текст берётся из `user_note` — на генерации прогоняется копирайтер (тюнинг; пусто → придумывает) → бриф → рендер; либо клиент шлёт готовый `brief` (если поле не менялось после «AI идея»). Презентация товара — из `shot_type`; цвета текста динамические. Mock (`RUNPIK_MOCK_GENERATION`) поддержан.
+        Рендер картинки карточки (content type CARD, **Вариант A** — текст запекается в изображение; идентичность товара сохраняется). Близнец `/image-generate` с текстовым слоем. `verify_jwt=true`. **Стоимость = операция `card-generate` CARD-камня (amber = 5), charge-on-success** (при сбое кредиты не списываются). Пишет строку в `generations` с `content_type='CARD'` + `card_brief`. Текст берётся из `user_note` — на генерации прогоняется копирайтер (тюнинг; пусто → придумывает) → бриф → рендер; либо клиент шлёт готовый `brief` (если поле не менялось после «AI идея»). Презентация товара — из `shot_type`; цвета текста динамические. Mock (`RUNPIK_MOCK_GENERATION`) поддержан.
       requestBody:
         required: true
         content:
@@ -1826,21 +1929,21 @@ paths:
                   mock: { type: boolean, description: 'Только при RUNPIK_MOCK_GENERATION.' }
         '400': { description: Битый JSON / нет analysis_id / ошибка сборки промпта }
         '401': { description: Нет/невалидный JWT }
-        '402': { description: 'Недостаточно кредитов (card_generate; amber=5). Body {error, balance, required}.' }
+        '402': { description: 'Недостаточно кредитов (card-generate; amber=5). Body {error, balance, required}.' }
         '403': { description: Анализ принадлежит другому юзеру }
         '404': { description: analysis_id не найден / входное фото пропало }
         '422': { description: 'verdict recheck (is_suitable.verdict=false). Body {error, blockers, analysis_id}.' }
         '500': { description: env vars / DB / upload }
         '502': { description: Gemini (копирайтер или image) }
 
-  /functions/v1/improve-card:
+  /functions/v1/card-improve:
     post:
       tags: [Generation]
       summary: Улучшить карточку (CARD, Вариант A, новая версия)
       description: |
-        Улучшение карточки (content type CARD, **Вариант A** — image-to-image правка существующей карточки: юзер видит готовую карточку и пишет, что поменять). Правка **точечная** — сохраняет товар, **весь текст** и дизайн, применяет только запрошенное (в отличие от фото-`/improve-generation`, который текст стирает). Близнец `/improve-generation`: переиспользует скелет версий (`root_generation_id`/`version_index`) + charge-on-success. `verify_jwt=true`.
+        Улучшение карточки (content type CARD, **Вариант A** — image-to-image правка существующей карточки: юзер видит готовую карточку и пишет, что поменять). Правка **точечная** — сохраняет товар, **весь текст** и дизайн, применяет только запрошенное (в отличие от фото-`/image-improve`, который текст стирает). Близнец `/image-improve`: переиспользует скелет версий (`root_generation_id`/`version_index`) + charge-on-success. `verify_jwt=true`.
 
-        **Источник обязан быть CARD** (иначе 400 `code: NOT_A_CARD`). **Стоимость = операция `card_improve` CARD-камня (amber = 3), charge-on-success** — камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный CARD). Создаётся **новая версия** в той же группе; при сбое Gemini строка версии удаляется (кредиты не списаны).
+        **Источник обязан быть CARD** (иначе 400 `code: NOT_A_CARD`). **Стоимость = операция `card-improve` CARD-камня (amber = 3), charge-on-success** — камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный CARD). Создаётся **новая версия** в той же группе; при сбое Gemini строка версии удаляется (кредиты не списаны).
 
         **Mock:** при `RUNPIK_MOCK_GENERATION=true` копирует исходную карточку как новую версию, response содержит `mock: true`.
       requestBody:
@@ -1910,7 +2013,7 @@ paths:
 
         **Вендорские движки НИКОГДА не возвращаются** (внутреннее, как `style_prompt`) — они привязаны к операциям камня. Возвращаются только опубликованные камни активных типов (сейчас `IMAGE` + `CARD`; `VIDEO` выключен). Цена операции = её `credit_price` в кредитах (см. `operations`).
 
-        **Frontend:** фильтруй `gems` по `content_type` (`IMAGE` и `CARD`), предвыбирай `is_default`. Пока по одному камню на тип → `gem_id` не передавай (берётся дефолтный камень типа); при нескольких камнях появится пикер. Цена = нужная операция из `operations` (напр. `generate` для фото, `card_generate` для карточки).
+        **Frontend:** фильтруй `gems` по `content_type` (`IMAGE` и `CARD`), предвыбирай `is_default`. Пока по одному камню на тип → `gem_id` не передавай (берётся дефолтный камень типа); при нескольких камнях появится пикер. Цена = нужная операция из `operations` (напр. `image-generate` для фото, `card-generate` для карточки).
       security: []
       parameters:
         - in: query
@@ -1945,19 +2048,28 @@ paths:
                         content_type: { type: string, example: IMAGE }
                         operations:
                           type: array
-                          description: 'Цена + тайминг ПО ОПЕРАЦИИ (2026-07-11; заменяет плоские credit_*). Движки/note вырезаны. Стоимость генерации = сумма задействованных операций (generate + env_analyze при ФО).'
+                          description: 'Цена + тайминг ПО ОПЕРАЦИИ (kebab-коды с 2026-07-14). Движки/note вырезаны. Стоимость генерации = базовая операция + сумма подключённых платных опций (paid_options). Анализ (product-analyze/environment-analyze) НЕ здесь — он на внутреннем камне-анализаторе (тип ANALYZE, скрыт).'
                           items:
                             type: object
                             properties:
-                              op: { type: string, example: generate, description: 'generate | improve | analyze | env_analyze | card_copywriting | card_generate' }
+                              op: { type: string, example: image-generate, description: 'image-generate | image-improve | card-generate | card-copywriting | card-improve (kebab-case, из реестра operations)' }
                               credit_price: { type: integer, example: 4 }
                               charge_timing: { type: string, nullable: true, example: on_generate, description: 'on_generate | on_create | on_request | null (free)' }
+                        paid_options:
+                          type: array
+                          description: 'Платные опции («Платные опции»), подключённые к камню, с ценой ЗА ЭТОТ КАМЕНЬ (2026-07-14). Опциональные платные фичи, которые юзер добавляет к генерации: сейчас `environment` (ФО, +1), позже `design_reference` (ДР). Клиент рисует «+N кредитов» рядом с фичей из этих данных. Итог = базовая операция + Σ выбранных платных опций.'
+                          items:
+                            type: object
+                            properties:
+                              code: { type: string, example: environment }
+                              label: { type: string, example: 'Фото окружения (ФО)' }
+                              credit_price: { type: integer, example: 1 }
                         is_default: { type: boolean }
                         sort_order: { type: integer }
                   content_types:
                     type: object
                     additionalProperties: { type: string }
-                    description: 'Локализованные label типов, у которых есть ≥1 камень. Камни — по content type (Quartz=IMAGE, amber=CARD), поэтому теперь `{ "IMAGE": "…", "CARD": "…" }`. Цена карточки = операция card_generate CARD-камня. Пока один камень на тип → gem_id не слать (берётся дефолтный).'
+                    description: 'Локализованные label типов, у которых есть ≥1 камень. Камни — по content type (Quartz=IMAGE, amber=CARD), поэтому теперь `{ "IMAGE": "…", "CARD": "…" }`. Цена карточки = операция card-generate CARD-камня. Пока один камень на тип → gem_id не слать (берётся дефолтный).'
                   locale: { type: string }
                   fallback_used: { type: boolean }
                   total: { type: integer }
@@ -1977,7 +2089,7 @@ paths:
 
         **`style_prompt` НИКОГДА не возвращается** (это IP). Query `WHERE is_published = true ORDER BY sort_order ASC, created_at DESC` (порядок задаётся админом через `POST /admin-styles/reorder`). Пустой `[]` пока founder не добавил стилей.
 
-        **Frontend:** при выборе стиля передавай `styles[i].id` как `style_id` в `/generate`. Если `excluded_categories` содержит категорию текущего продукта — задизейбль стиль (backend тоже отвергнет, 400).
+        **Frontend:** при выборе стиля передавай `styles[i].id` как `style_id` в `/image-generate`. Если `excluded_categories` содержит категорию текущего продукта — задизейбль стиль (backend тоже отвергнет, 400).
       security: []
       parameters:
         - in: query
@@ -2395,7 +2507,7 @@ paths:
     get:
       tags: [Admin]
       summary: 4 lighting profiles с полной prose
-      description: '4 profiles (`daylight`, `studio`, `sunset`, `rim`) — slugs + полные prose описания. Юзер опционально выбирает один в `/generate` body → backend заменяет default lighting блока на этот.'
+      description: '4 profiles (`daylight`, `studio`, `sunset`, `rim`) — slugs + полные prose описания. Юзер опционально выбирает один в `/image-generate` body → backend заменяет default lighting блока на этот.'
       responses:
         '200':
           description: OK
@@ -3091,7 +3203,7 @@ paths:
         Тарифы для paywall. Публично читаемо (`is_active=true`). Источник правды для
         названий/кредитов/фич/badge/highlight. Цены НЕ здесь (веб — `subscription_skus`,
         натив — стор). `≈ N photos` = `credits_monthly` ÷ мин. цена операции
-        `generate` активных gems (см. `GET /gems` → `operations`).
+        `image-generate` активных gems (см. `GET /gems` → `operations`).
       parameters:
         - { in: query, name: select, schema: { type: string }, example: '*' }
         - { in: query, name: is_active, schema: { type: string }, example: eq.true }
@@ -3346,11 +3458,15 @@ components:
 
     AiEngineWritable:
       type: object
-      description: 'Редактируемые поля скрытого движка (ai_engines). Для POST обязательны display_name + vendor + provider_model.'
+      description: 'Редактируемые поля скрытого движка (ai_engines). Для POST обязательны display_name + vendor + provider_model + modality.'
       properties:
         display_name: { type: string, description: 'Внутреннее имя для админки, НЕ переводится.' }
         vendor: { type: string, example: gemini }
         provider_model: { type: string, example: gemini-2.5-flash-image }
+        modality:
+          type: string
+          enum: [text, image, video]
+          description: 'Что движок ПРОИЗВОДИТ (2026-07-14). Обязательно на POST. Используется для валидации привязки op↔движок (image-операции нужен image-движок). Отличается от контент-типа IMAGE/CARD (карточка — тоже картинка).'
         version: { type: string, example: '2.5' }
         cost_per_op: { type: number, description: 'Себестоимость у вендора, напр. 0.039.' }
         cost_unit:
@@ -3539,12 +3655,12 @@ components:
     Lighting:
       type: string
       enum: [daylight, studio, sunset, rim]
-      description: 'User-selectable lighting profile. Optional в `/generate` body. Если передан — заменяет default lighting prose шот-тайпа. NULL = дефолт блока.'
+      description: 'User-selectable lighting profile. Optional в `/image-generate` body. Если передан — заменяет default lighting prose шот-тайпа. NULL = дефолт блока.'
 
     AspectRatio:
       type: string
       enum: ['16:9', '4:3', '1:1', '3:4', '9:16']
-      description: 'User-selectable aspect ratio. Optional в `/generate` body. Прокидывается в Gemini как `imageConfig.aspectRatio` (camelCase REST). NULL = Gemini auto-detect из input image.'
+      description: 'User-selectable aspect ratio. Optional в `/image-generate` body. Прокидывается в Gemini как `imageConfig.aspectRatio` (camelCase REST). NULL = Gemini auto-detect из input image.'
 
     SupportedLocale:
       type: string
@@ -3715,7 +3831,7 @@ components:
 
     Generation:
       type: object
-      description: 'Одна попытка генерации (успех или сбой). Создаётся в `/generate` (IMAGE) или `/generate-card` (CARD).'
+      description: 'Одна попытка генерации (успех или сбой). Создаётся в `/image-generate` (IMAGE) или `/card-generate` (CARD).'
       properties:
         id:
           type: string
@@ -3782,7 +3898,7 @@ components:
           description: 'Заполняется при `status=failed`. Для Gemini ошибок — содержит первые 500 байт response body.'
         credits_charged:
           type: integer
-          description: 'Списанные кредиты = цена операции `generate` камня (Quartz = 4). До 2026-06-16 всегда 1.'
+          description: 'Списанные кредиты = цена операции `image-generate` камня (Quartz = 4). До 2026-06-16 всегда 1.'
         created_at:
           type: string
           format: date-time
@@ -3792,7 +3908,7 @@ components:
     ProductAnalysis:
       type: object
       description: |
-        Структурированный JSON возвращаемый Gemini Flash text в Stage 1. Контракт между `/analyze` и `/generate`.
+        Структурированный JSON возвращаемый Gemini Flash text в Stage 1. Контракт между `/product-analyze` и `/image-generate`.
       properties:
         product:
           type: object
@@ -3814,7 +3930,7 @@ components:
                 - $ref: '#/components/schemas/LocalizedString'
               nullable: true
               description: |
-                Локализованное имя-заголовок товара ({en, ru}), предлагаемое AI для UI. Может отсутствовать/быть null (AI не опознал товар). НЕ используется в Stage 2 — чистый UI-identity. Фронт берёт по локали юзера; финальное (отредактированное) имя передаётся в `/generate` как `product_name`. (2026-06-07)
+                Локализованное имя-заголовок товара ({en, ru}), предлагаемое AI для UI. Может отсутствовать/быть null (AI не опознал товар). НЕ используется в Stage 2 — чистый UI-identity. Фронт берёт по локали юзера; финальное (отредактированное) имя передаётся в `/image-generate` как `product_name`. (2026-06-07)
         appearance:
           type: object
           properties:
@@ -3912,12 +4028,12 @@ components:
                   description: '1 короткое предложение — почему пропсы подходят товару'
         is_suitable:
           type: object
-          description: 'КРИТИЧЕСКОЕ поле. Frontend должен проверять `verdict` перед `/generate`.'
+          description: 'КРИТИЧЕСКОЕ поле. Frontend должен проверять `verdict` перед `/image-generate`.'
           properties:
             verdict:
               type: boolean
               description: |
-                **`false` → /analyze всё равно вернёт 200**, но `/generate` вернёт 422.
+                **`false` → /analyze всё равно вернёт 200**, но `/image-generate` вернёт 422.
                 Frontend должен показать blockers screen и НЕ переходить к генерации.
             confidence:
               type: integer
@@ -3998,7 +4114,7 @@ components:
           example: wnbtsqfdlbjwtetppdng
         mock_mode:
           type: boolean
-          description: '**Критичный флаг.** Если `true`, реальная Gemini генерация не работает — `/generate` возвращает копию input bytes.'
+          description: '**Критичный флаг.** Если `true`, реальная Gemini генерация не работает — `/image-generate` возвращает копию input bytes.'
         prompt_version:
           type: string
           example: v1.0
