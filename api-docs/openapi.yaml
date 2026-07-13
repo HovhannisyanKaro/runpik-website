@@ -1833,6 +1833,68 @@ paths:
         '500': { description: env vars / DB / upload }
         '502': { description: Gemini (копирайтер или image) }
 
+  /functions/v1/improve-card:
+    post:
+      tags: [Generation]
+      summary: Улучшить карточку (CARD, Вариант A, новая версия)
+      description: |
+        Улучшение карточки (content type CARD, **Вариант A** — image-to-image правка существующей карточки: юзер видит готовую карточку и пишет, что поменять). Правка **точечная** — сохраняет товар, **весь текст** и дизайн, применяет только запрошенное (в отличие от фото-`/improve-generation`, который текст стирает). Близнец `/improve-generation`: переиспользует скелет версий (`root_generation_id`/`version_index`) + charge-on-success. `verify_jwt=true`.
+
+        **Источник обязан быть CARD** (иначе 400 `code: NOT_A_CARD`). **Стоимость = операция `card_improve` CARD-камня (amber = 3), charge-on-success** — камень наследуется от исходной версии (`source.gem_id`, fallback — дефолтный CARD). Создаётся **новая версия** в той же группе; при сбое Gemini строка версии удаляется (кредиты не списаны).
+
+        **Mock:** при `RUNPIK_MOCK_GENERATION=true` копирует исходную карточку как новую версию, response содержит `mock: true`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [generation_id, improvement_prompt]
+              properties:
+                generation_id:
+                  type: string
+                  format: uuid
+                  description: Существующая CARD-генерация (любая версия группы). Должна быть `done`, с output'ом, принадлежать caller'у.
+                improvement_prompt:
+                  type: string
+                  minLength: 1
+                  maxLength: 300
+                  description: Что поменять. Проходит sanitizeUserText перед Gemini.
+                  example: сделай заголовок крупнее
+                idempotency_key:
+                  type: string
+                  format: uuid
+                  description: Повтор с тем же ключом → replay существующей версии (без повторного списания).
+      responses:
+        '200':
+          description: Новая версия карточки создана (или idempotent replay)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generation_id: { type: string, format: uuid, description: НОВАЯ версия }
+                  root_generation_id: { type: string, format: uuid }
+                  version_index: { type: integer, example: 1 }
+                  source_generation_id: { type: string, format: uuid }
+                  improvement_prompt: { type: string }
+                  content_type: { type: string, example: CARD }
+                  output_url: { type: string, description: 'Signed URL, TTL 1 час.' }
+                  output_path: { type: string }
+                  expires_in_seconds: { type: integer, example: 3600 }
+                  status: { type: string, example: done }
+                  credits_remaining: { type: integer }
+                  idempotent_replay: { type: boolean, description: present только при idempotency replay }
+                  mock: { type: boolean, description: 'Только при RUNPIK_MOCK_GENERATION.' }
+        '400': { description: 'Битый JSON / нет generation_id / пустой или >300 промпт (`code: PROMPT_EMPTY` / `PROMPT_TOO_LONG`) / источник не CARD (`code: NOT_A_CARD`, для фото → /improve-generation)' }
+        '401': { description: Нет/невалидный JWT }
+        '402': { description: 'Недостаточно кредитов (`code: INSUFFICIENT_CREDITS`; card_improve, amber=3)' }
+        '403': { description: Генерация принадлежит другому юзеру }
+        '404': { description: generation_id не найден }
+        '409': { description: 'Source не готов (`code: SOURCE_NOT_READY`) или лимит версий (`code: VERSION_LIMIT_REACHED`)' }
+        '500': { description: env vars / DB / upload }
+        '502': { description: 'Image-to-image сбой (`code: GEMINI_FAILURE`). Строка версии удалена, кредиты НЕ списаны.' }
+
   # ============================================================
   # INSPIRE / STYLES
   # ============================================================
@@ -1846,7 +1908,7 @@ paths:
 
         **No auth required** — `verify_jwt = false`. Cache `public, max-age=300` (5 min edge CDN).
 
-        **`generate_engines` / `analyze_engines` НИКОГДА не возвращаются** (внутреннее, как `style_prompt`). Возвращаются только активные камни активных типов (CARD/VIDEO выключены). Цена операции = `credit_*` камня в кредитах.
+        **Вендорские движки НИКОГДА не возвращаются** (внутреннее, как `style_prompt`) — они привязаны к операциям камня. Возвращаются только опубликованные камни активных типов (сейчас `IMAGE` + `CARD`; `VIDEO` выключен). Цена операции = её `credit_price` в кредитах (см. `operations`).
 
         **Frontend:** фильтруй `gems` по `content_type` (`IMAGE` и `CARD`), предвыбирай `is_default`. Пока по одному камню на тип → `gem_id` не передавай (берётся дефолтный камень типа); при нескольких камнях появится пикер. Цена = нужная операция из `operations` (напр. `generate` для фото, `card_generate` для карточки).
       security: []
