@@ -3659,7 +3659,43 @@ components:
         card_brief:
           type: object
           nullable: true
-          description: 'Для CARD: использованный бриф (copy+design). NULL для IMAGE.'
+          description: 'Для CARD: использованный бриф (текст+дизайн), запечённый в картинку. NULL для IMAGE. ОДИН язык (поле `language`), НЕ {en,ru}. Клиент читает через обычный PostgREST-select по `generations` (RLS отдаёт владельцу) — отдельного эндпоинта нет. Наследуется всеми версиями группы; `/card-improve` его НЕ обновляет (может отставать от картинки, если improve правил текст). `design.*` — ПРОЗА-строки (не hex/структура).'
+          properties:
+            language: { type: string, example: ru }
+            copy:
+              type: object
+              properties:
+                eyebrow: { type: string, nullable: true }
+                headline: { type: string, description: 'всегда присутствует' }
+                subheadline: { type: string, nullable: true }
+                features:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      label: { type: string }
+                      detail: { type: string }
+                      icon_hint: { type: string }
+                badge:
+                  type: object
+                  nullable: true
+                  properties:
+                    text: { type: string }
+                    kind: { type: string }
+                footer_tagline: { type: string, nullable: true }
+            design:
+              type: object
+              description: 'Все 4 поля — свободный текст (проза), НЕ структура и НЕ hex.'
+              properties:
+                font_personality: { type: string }
+                palette: { type: string }
+                mood: { type: string }
+                layout_hint: { type: string }
+            meta:
+              type: object
+              properties:
+                emphasis: { type: string }
+                locked_texts: { type: array, items: { type: string } }
         user_id:
           type: string
           format: uuid
