@@ -12,7 +12,7 @@ info:
     - **Supabase Cloud** (project ref `wnbtsqfdlbjwtetppdng`, регион `eu-central-1` Frankfurt)
     - **8 Edge Functions:** `/product-analyze`, `/image-generate`, `/shot-types`, `/faq`, `/delete-project`, `/delete-generation`, `/admin`, `/process-account-deletions`
     - **Google Gemini API** — `gemini-2.5-flash` для vision/text, `gemini-2.5-flash-image` для генерации
-    - **Storage buckets:** `inputs` (приватный, 10 MiB max), `outputs` (приватный, signed URL TTL 1 час)
+    - **Storage buckets:** `inputs` (приватный, 10 MiB max), `outputs` (публичный, постоянный public CDN URL)
 
     ## Двухстадийный pipeline генерации
 
@@ -20,7 +20,7 @@ info:
     2. `POST /functions/v1/product-analyze` → Gemini Flash text возвращает `ProductAnalysis` JSON + кеширует
     3. Frontend проверяет `analysis.is_suitable.verdict` — если `false`, показывает blockers
     4. Frontend дёргает `GET /functions/v1/shot-types` для рендера UI выбора типа кадра
-    5. `POST /functions/v1/image-generate` → Gemini Flash Image генерирует output, кладёт в `outputs/{user_id}/...`, возвращает signed URL (TTL 1 час)
+    5. `POST /functions/v1/image-generate` → Gemini Flash Image генерирует output, кладёт в `outputs/{user_id}/...`, возвращает постоянный public CDN URL
 
     ## Аутентификация
 
@@ -674,7 +674,7 @@ paths:
                     type: string
                   expires_in_seconds:
                     type: integer
-                    example: 3600
+                    example: 2592000
                   status:
                     type: string
                     example: done
@@ -814,7 +814,7 @@ paths:
       tags: [AI Pipeline]
       summary: Stage 2 — генерация изображения
       description: |
-        **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/product-analyze`, строит Stage 2 prompt, прогоняет через движки выбранного **камня** (`gems`) с priority+retry+fallback, загружает output в `outputs` bucket, возвращает signed URL.
+        **Второй шаг pipeline.** Берёт `ProductAnalysis` сохранённый в `/product-analyze`, строит Stage 2 prompt, прогоняет через движки выбранного **камня** (`gems`) с priority+retry+fallback, загружает output в `outputs` bucket, возвращает постоянный public CDN URL.
 
         **Биллинг (kebab-операции + платные опции с 2026-07-14):** списывается цена операции `image-generate` камня в **кредитах** (Quartz = **4**, `gem_operations`); при ФО сверху **платная опция** `environment` камня (`gem_paid_options`, стоимость = базовая операция + сумма платных опций). Камень — поле `gem_id` (optional; NULL → дефолтный камень IMAGE). Списание — **по факту успеха** (charge-on-success), сначала кошелёк `subscription`, потом `topup`. **При сбое генерации кредиты НЕ списываются** (refund не нужен — списания просто нет).
 
@@ -826,7 +826,7 @@ paths:
 
         **Real generation LIVE (с 2026-05-31):** billing включён, mock выключен — `/image-generate` делает настоящую AI-генерацию (10-30s). Mock — dev-only тумблер; в prod-ответах поля `mock` нет.
 
-        **Output URL TTL:** 1 час. Сохрани `output_path` чтобы перегенерировать signed URL потом через Storage SDK.
+        **Output URL:** постоянный public CDN URL (bucket `outputs` публичный, не истекает). Собирается из `output_path` через `supabase.storage.from('outputs').getPublicUrl(output_path)`.
       requestBody:
         required: true
         content:
@@ -962,7 +962,7 @@ paths:
       tags: [Environments]
       summary: Список окружений юзера (i18n, signed URLs)
       description: |
-        Возвращает окружения («Фото окружения») текущего юзера с локализованным `name` и **signed URL** на исходное фото (bucket приватный, TTL 1 час).
+        Возвращает окружения («Фото окружения») текущего юзера с локализованным `name` и **signed URL** на исходное фото (bucket приватный, TTL 30 дней).
 
         **Auth:** JWT юзера (`verify_jwt = true`). `scene_prompt` наружу НЕ отдаётся.
       parameters:
@@ -994,7 +994,7 @@ paths:
                     type: integer
                   expires_in_seconds:
                     type: integer
-                    example: 3600
+                    example: 2592000
         '401':
           description: Нет/невалидный JWT
         '500':
@@ -1737,9 +1737,9 @@ paths:
                   generation_id: { type: string, format: uuid }
                   analysis_id: { type: string, format: uuid }
                   content_type: { type: string, example: CARD }
-                  output_url: { type: string, description: 'Signed URL, TTL 1 час.' }
+                  output_url: { type: string, description: 'Постоянный public CDN URL (не истекает).' }
                   output_path: { type: string }
-                  expires_in_seconds: { type: integer, example: 3600 }
+                  expires_in_seconds: { type: integer, example: 2592000 }
                   warnings: { type: array, items: { type: string } }
                   credits_remaining: { type: integer }
                   mock: { type: boolean, description: 'Только при RUNPIK_MOCK_GENERATION.' }
@@ -1798,9 +1798,9 @@ paths:
                   source_generation_id: { type: string, format: uuid }
                   improvement_prompt: { type: string }
                   content_type: { type: string, example: CARD }
-                  output_url: { type: string, description: 'Signed URL, TTL 1 час.' }
+                  output_url: { type: string, description: 'Постоянный public CDN URL (не истекает).' }
                   output_path: { type: string }
-                  expires_in_seconds: { type: integer, example: 3600 }
+                  expires_in_seconds: { type: integer, example: 2592000 }
                   status: { type: string, example: done }
                   credits_remaining: { type: integer }
                   idempotent_replay: { type: boolean, description: present только при idempotency replay }
@@ -2349,7 +2349,7 @@ paths:
         - `mock_mode` — критичный флаг (если `true`, backend в mock-режиме, реальная Gemini генерация не работает)
         - `prompt_version` — для cache invalidation analyses
         - `gemini_text_model` / `gemini_image_model` — какие модели используются
-        - `signed_url_ttl_seconds` — TTL signed URLs (1 час)
+        - `signed_url_ttl_seconds` — TTL signed URLs (30 дней)
         - `credits_per_generation` — 1
         - `signup_bonus_credits` — 3
         - `deletion_grace_period_days` — 7
@@ -3352,7 +3352,7 @@ components:
           type: string
           format: uri
           nullable: true
-          description: 'Signed URL исходного фото (bucket приватный), TTL 1 час.'
+          description: 'Signed URL исходного фото (bucket приватный), TTL 30 дней.'
         match_percent:
           type: integer
           description: 'Applied Environment Match % (Low <50 / Medium 50-70 / High 70+).'
@@ -3916,14 +3916,14 @@ components:
         output_url:
           type: string
           format: uri
-          description: 'Signed URL на сгенерированную картинку. **TTL 1 час.** После expiry — обновляй через `supabase.storage.from(''outputs'').createSignedUrl(output_path, 3600)`.'
+          description: 'Постоянный public CDN URL (bucket outputs публичный, не истекает). Строится через `supabase.storage.from(''outputs'').getPublicUrl(output_path)`.'
         output_path:
           type: string
-          description: 'Путь внутри `outputs` bucket. Сохрани чтобы перегенерировать signed URL потом.'
+          description: 'Путь внутри `outputs` bucket.'
           example: dd254858-.../9c2f8a-...jpg
         expires_in_seconds:
           type: integer
-          example: 3600
+          example: 2592000
         warnings:
           type: array
           items:
@@ -3978,7 +3978,7 @@ components:
           example: gemini-2.5-flash-image
         signed_url_ttl_seconds:
           type: integer
-          example: 3600
+          example: 2592000
         credits_per_generation:
           type: integer
           example: 1
