@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Runpik Backend API
-  version: '2026-07-18'
+  version: '2026-07-19'
   description: |
     AI-сервис продуктовой фотографии. Документация описывает client-facing
     API контракт: Edge Functions, PostgREST endpoints для прямого доступа
@@ -645,6 +645,15 @@ paths:
                   type: string
                   format: uuid
                   description: Client-supplied UUID. Повторный запрос с тем же ключом → replay существующей версии (без повторного списания).
+                gem_id:
+                  type: string
+                  format: uuid
+                  description: >-
+                    Камень для этого improve (2026-07-19). Если задан — должен быть активным IMAGE-камнем
+                    (чужой тип → 400 "Model is not for IMAGE content") и поддерживать операцию image-improve
+                    (иначе → 400 "This gem does not support improve"). Не задан → наследуется камень
+                    версии-источника (legacy NULL → дефолтный IMAGE). Цена improve — из выбранного камня,
+                    поэтому версии одной группы могут быть на разных IMAGE-камнях. Пишется в generations.gem_id.
       responses:
         '200':
           description: Новая версия создана (или idempotent replay)
@@ -687,7 +696,7 @@ paths:
                     type: boolean
                     description: present только при RUNPIK_MOCK_GENERATION=true
         '400':
-          description: 'Пустой/слишком длинный prompt (`code: PROMPT_EMPTY` / `PROMPT_TOO_LONG`), missing generation_id, invalid JSON'
+          description: 'Пустой/слишком длинный prompt (`code: PROMPT_EMPTY` / `PROMPT_TOO_LONG`), missing generation_id, invalid JSON, ИЛИ невалидный gem_id: не UUID / не IMAGE-камень ("Model is not for IMAGE content") / камень без image-improve ("This gem does not support improve")'
         '401':
           description: Нет/невалидный JWT
         '402':
@@ -1784,6 +1793,15 @@ paths:
                   type: string
                   format: uuid
                   description: Повтор с тем же ключом → replay существующей версии (без повторного списания).
+                gem_id:
+                  type: string
+                  format: uuid
+                  description: >-
+                    Камень для этого improve (2026-07-19). Если задан — должен быть активным CARD-камнем
+                    (чужой тип → 400 "Model is not for CARD content") и поддерживать card-improve
+                    (иначе → 400 "This gem does not support improve"). Не задан → наследуется камень источника
+                    (legacy NULL → дефолтный CARD). Цена — из выбранного камня; версии группы могут быть на
+                    разных CARD-камнях. Пишется в generations.gem_id.
       responses:
         '200':
           description: Новая версия карточки создана (или idempotent replay)
@@ -1805,7 +1823,7 @@ paths:
                   credits_remaining: { type: integer }
                   idempotent_replay: { type: boolean, description: present только при idempotency replay }
                   mock: { type: boolean, description: 'Только при RUNPIK_MOCK_GENERATION.' }
-        '400': { description: 'Битый JSON / нет generation_id / пустой или >300 промпт (`code: PROMPT_EMPTY` / `PROMPT_TOO_LONG`) / источник не CARD (`code: NOT_A_CARD`, для фото → /improve-generation)' }
+        '400': { description: 'Битый JSON / нет generation_id / пустой или >300 промпт (`code: PROMPT_EMPTY` / `PROMPT_TOO_LONG`) / источник не CARD (`code: NOT_A_CARD`, для фото → /improve-generation) / невалидный gem_id: не UUID / не CARD-камень ("Model is not for CARD content") / камень без card-improve ("This gem does not support improve")' }
         '401': { description: Нет/невалидный JWT }
         '402': { description: 'Недостаточно кредитов (`code: INSUFFICIENT_CREDITS`; card_improve, amber=3)' }
         '403': { description: Генерация принадлежит другому юзеру }
