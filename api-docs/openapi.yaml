@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Runpik Backend API
-  version: '2026-07-13'
+  version: '2026-07-18'
   description: |
     AI-сервис продуктовой фотографии. Документация описывает client-facing
     API контракт: Edge Functions, PostgREST endpoints для прямого доступа
@@ -1166,7 +1166,7 @@ paths:
     post:
       tags: [Admin]
       summary: Создать камень (superadmin only)
-      description: 'Required: `code`, `gen_content_type_id` (только метаданные камня). `is_default=true` авто-снимает default с других камней того же типа. Цены/движки задаются отдельно через операции.'
+      description: 'Required: `code`, `gen_content_type_id` (только метаданные камня). `is_default=true` авто-снимает default с других камней того же типа. Цены/движки задаются отдельно через операции. **`new_until` (2026-07-18):** если поле НЕ передать — авто `now()+30д` (новый камень месяц с бейджем «new»); передать `null` — создать без «new».'
       requestBody:
         required: true
         content:
@@ -1181,10 +1181,10 @@ paths:
           content:
             application/json:
               schema: { type: object, properties: { gem: { $ref: '#/components/schemas/Gem' } } }
-        '400': { description: Bad body / неизвестный engine_id / gen_content_type_id не найден }
+        '400': { description: Bad body / неизвестный engine_id / gen_content_type_id не найден / невалидный version/new_until/badges }
         '401': { description: Нет/невалидный JWT }
         '403': { description: Не superadmin }
-        '409': { description: Дубль code }
+        '409': { description: 'Дубль code ("…code already exists") ИЛИ дубль version в этом content type ("…already uses that version") — различай по тексту error' }
   /functions/v1/admin-gems/{id}:
     patch:
       tags: [Admin]
@@ -1206,10 +1206,10 @@ paths:
           content:
             application/json:
               schema: { type: object, properties: { gem: { $ref: '#/components/schemas/Gem' } } }
-        '400': { description: Bad body / неизвестный engine_id }
+        '400': { description: Bad body / неизвестный engine_id / невалидный version/new_until/badges }
         '403': { description: Не superadmin }
         '404': { description: Камень не найден }
-        '409': { description: Дубль code }
+        '409': { description: 'Дубль code ("…code already exists") ИЛИ дубль version в этом content type ("…already uses that version") — различай по тексту error' }
     delete:
       tags: [Admin]
       summary: Удалить камень (superadmin only)
@@ -1862,6 +1862,19 @@ paths:
                         display_name: { type: string, example: Quartz }
                         description: { type: string }
                         content_type: { type: string, example: IMAGE }
+                        version:
+                          type: number
+                          example: 2.0
+                          description: 'Юзер-версия камня (2026-07-18). Больше = новее/сильнее. Уникальна ВНУТРИ content type (Sapphire 2.0/IMAGE и Ruby 2.0/CARD сосуществуют — разные пикеры). Порядок списка задаёт sort_order, НЕ version. Клиент рисует «v2.0».'
+                        badges:
+                          type: array
+                          description: 'Бейджи камня (2026-07-18), локализованные. Первым идёт авто-`new` (пока активно внутреннее окно new_until; авто-истекает без крона), затем курируемые (popular/pro/…). Рендерь массив generically. Пусто = бейджей нет.'
+                          items:
+                            type: object
+                            properties:
+                              code: { type: string, example: new, description: 'new (авто) | curated codes' }
+                              label: { type: string, example: 'Новинка' }
+                              tone: { type: string, nullable: true, example: accent, description: 'UI-подсказка стиля (accent для new, произвольная для курируемых) или null' }
                         operations:
                           type: array
                           description: 'Цена + тайминг ПО ОПЕРАЦИИ (kebab-коды с 2026-07-14). Движки/note вырезаны. Стоимость генерации = базовая операция + сумма подключённых платных опций (paid_options). Анализ (product-analyze/environment-analyze) НЕ здесь — он на внутреннем камне-анализаторе (тип ANALYZE, скрыт).'
@@ -3240,8 +3253,27 @@ components:
           format: uuid
           description: 'Тип контента (IMAGE/CARD/VIDEO). Должен существовать.'
         is_active: { type: boolean }
-        sort_order: { type: integer }
+        sort_order: { type: integer, description: 'Порядок в списках (ASC). НЕ version — версия отдельное поле.' }
         is_default: { type: boolean, description: 'true авто-снимает default у других камней того же типа.' }
+        version:
+          type: number
+          example: 2.0
+          description: 'Юзер-версия (2026-07-18), >0 и <100. Уникальна ВНУТРИ content type (дубль → 409 с текстом "…already uses that version"). Дефолт 1.0.'
+        new_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: 'Окно авто-бейджа «new» (2026-07-18). Пока now()<new_until, публичный /gems показывает бейдж new. null = не показывать. ВАЖНО: если при POST поле не передать — бэкенд ставит now()+30д автоматически; передай null явно, чтобы создать без «new». В админ-GET поле видно; в публичном /gems наружу НЕ отдаётся (там уже готовый бейдж).'
+        badges:
+          type: array
+          description: 'Курируемые бейджи (2026-07-18). Бейдж «new» сюда НЕ кладём — им управляет new_until. PATCH заменяет массив целиком (не merge).'
+          items:
+            type: object
+            required: [code]
+            properties:
+              code: { type: string, pattern: '^[a-z][a-z0-9_-]*$', example: popular }
+              label: { $ref: '#/components/schemas/LocalizedText' }
+              tone: { type: string, nullable: true, example: premium }
       # 2026-07-11: цены + движки сняты с камня → gem_operations (GemOperationWritable),
       # правятся роутами PUT/DELETE /admin-gems/{id}/operations/{op}.
 
