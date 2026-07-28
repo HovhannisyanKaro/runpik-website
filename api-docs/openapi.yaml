@@ -2508,6 +2508,44 @@ paths:
         '200':
           description: void (deletion отменён)
 
+  /rest/v1/rpc/get_my_project_overview:
+    post:
+      tags: [RPCs]
+      summary: Сводка по проектам (счётчики + обложки)
+      description: |
+        Возвращает **по строке на каждый проект текущего юзера, где есть ≥1 готовый оригинал**: число фото, обложку (путь свежайшей генерации) и время последней активности. Считается на сервере (без клиентского row-cap) → счётчики точные, обложки не пропадают.
+
+        В Flutter: `final rows = await supabase.rpc('get_my_project_overview');`
+
+        - **Только оригиналы** (`version_index IS NULL OR = 0`) — Improve-версии не считаются и не берутся в обложку.
+        - `photo_count` = **IMAGE + CARD вместе** (совпадает с гридом в режиме «Все»).
+        - `latest_output_path` — `output_image_path` самой свежей генерации проекта в публичном бакете `outputs`; клиент строит `getPublicUrl` сам. NULL-блобы пропускаются.
+        - **Проекты без готовых оригиналов в ответе отсутствуют** — список проектов бери из таблицы `projects`, missing-строку трактуй как `count=0` / без обложки. RPC — только counts+обложки, не источник списка проектов.
+        - `security definer` + `auth.uid()`-фильтр; `EXECUTE` только `authenticated`.
+      responses:
+        '200':
+          description: Массив сводок по проектам (по строке на проект с ≥1 готовым оригиналом)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    project_id:
+                      type: string
+                      format: uuid
+                    photo_count:
+                      type: integer
+                      example: 13
+                    latest_output_path:
+                      type: string
+                      nullable: true
+                      example: dd254858-8b9c-474d-8eb8-d4c0e9540751/7727500c-b442-4d67-9919-c44b2f726800.jpg
+                    latest_created_at:
+                      type: string
+                      format: date-time
+
   /functions/v1/home-blocks:
     get:
       tags: [Home]
