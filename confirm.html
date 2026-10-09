@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Confirm your email — Runpik</title>
+  <meta name="description" content="Email confirmation for your Runpik account.">
+  <link rel="icon" type="image/png" sizes="256x256" href="assets/favicon.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="landing.css">
+  <style>
+    .rp-msg { margin-top: 1.25rem; padding: 0.95rem 1.1rem; border-radius: 12px; font-size: 0.95rem; line-height: 1.55; }
+    .rp-msg.err { border: 1px solid rgba(255,91,91,0.35); background: rgba(255,91,91,0.08); color: #ffb4b4; }
+    .rp-msg.ok  { border: 1px solid rgba(123,224,163,0.35); background: rgba(123,224,163,0.08); color: #9be8bd; }
+    .rp-msg.neutral { border: 1px solid var(--line, #2a2a30); background: var(--surface-2, #1F1F24); color: var(--ink2); }
+    .rp-why { margin-top: 1rem; color: var(--ink3); font-size: 0.88rem; line-height: 1.6; }
+    .rp-cta { display: inline-block; margin-top: 1.5rem; padding: 0.8rem 1.4rem; border-radius: 13px; background: var(--grad); color: #fff; font-weight: 600; text-decoration: none; }
+    .rp-code { margin-top: 1.1rem; color: var(--ink3); font-size: 0.76rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; opacity: 0.75; }
+  </style>
+</head>
+<body>
+  <nav class="site-nav">
+    <a class="brand" href="index.html"><img class="mark" src="assets/runpik-logo.png" alt="Runpik"><span class="word">Runpik</span></a>
+    <a class="btn-grad" href="https://app.runpik.com" target="_blank" rel="noopener">Try for free</a>
+  </nav>
+
+  <main class="legal">
+    <h1 id="rp-title">Confirm your email</h1>
+    <p class="last-updated" id="rp-subtitle">&nbsp;</p>
+
+    <div class="locale-toggle" role="group" aria-label="Language">
+      <button type="button" data-locale="en" class="active">English</button>
+      <button type="button" data-locale="ru">Русский</button>
+    </div>
+
+    <div id="rp-status" class="rp-msg neutral"></div>
+    <p class="rp-why" id="rp-why"></p>
+    <a class="rp-cta" id="rp-cta" href="https://app.runpik.com" target="_blank" rel="noopener">Open Runpik</a>
+    <p class="rp-code" id="rp-code" style="display:none"></p>
+
+    <p style="margin-top: 2.5rem;"><a href="index.html">&larr; Back to home</a></p>
+  </main>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'runpik_reset_locale'; // та же память языка, что у сброса пароля
+
+      var T = {
+        en: {
+          title: 'Confirm your email',
+          ok: {
+            subtitle: 'Your email address is confirmed.',
+            status: 'Email confirmed. Go back to the Runpik app and sign in — your 10 free credits are already on your account.',
+            why: '',
+            cta: 'Open Runpik',
+          },
+          err: {
+            subtitle: 'This link did not work.',
+            status: 'This confirmation link is invalid or has expired.',
+            why: 'Two things make a link stop working: it is older than 24 hours, or a newer confirmation email has been sent since — only the most recent letter works. Open the app and press “Send again”, then use the newest email.',
+            cta: 'Open Runpik',
+          },
+          none: {
+            subtitle: 'Nothing to confirm here.',
+            status: 'This page opens from the confirmation link in your email.',
+            why: 'If you are waiting for a letter, check the Spam folder, or open the app and press “Send again”.',
+            cta: 'Open Runpik',
+          },
+        },
+        ru: {
+          title: 'Подтверждение почты',
+          ok: {
+            subtitle: 'Адрес подтверждён.',
+            status: 'Почта подтверждена. Вернитесь в приложение Runpik и войдите — 10 бесплатных кредитов уже на счету.',
+            why: '',
+            cta: 'Открыть Runpik',
+          },
+          err: {
+            subtitle: 'Ссылка не сработала.',
+            status: 'Эта ссылка подтверждения недействительна или устарела.',
+            why: 'Ссылка перестаёт работать по двум причинам: прошло больше суток или с тех пор было отправлено новое письмо — действует только самое последнее. Откройте приложение, нажмите «Отправить ещё раз» и перейдите по ссылке из нового письма.',
+            cta: 'Открыть Runpik',
+          },
+          none: {
+            subtitle: 'Здесь нечего подтверждать.',
+            status: 'Эту страницу открывают по ссылке из письма с подтверждением.',
+            why: 'Если ждёте письмо — загляните в папку «Спам» или откройте приложение и нажмите «Отправить ещё раз».',
+            cta: 'Открыть Runpik',
+          },
+        },
+      };
+
+      // ---- Что нам сказал Supabase -------------------------------------
+      // Отказ он кладёт в якорь: #error=access_denied&error_code=otp_expired
+      // Успех — в запрос: ?code=... (поток PKCE) или в якорь #access_token=…
+      // ⛔ Код НЕ обмениваем: проверочная строка живёт в приложении, а не здесь.
+      // Наше дело — сказать человеку правду, а не завести ему сессию в браузере.
+      var hash = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+      var query = new URLSearchParams(window.location.search || '');
+
+      var errorCode = hash.get('error_code') || query.get('error_code') ||
+                      hash.get('error') || query.get('error');
+      var hasSuccess = !!(query.get('code') || hash.get('access_token'));
+
+      var state = errorCode ? 'err' : (hasSuccess ? 'ok' : 'none');
+
+      var lang = (function () {
+        try { var s = localStorage.getItem(STORAGE_KEY); if (s === 'en' || s === 'ru') return s; } catch (e) {}
+        return (navigator.language || 'en').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+      })();
+
+      var statusEl = document.getElementById('rp-status');
+      var whyEl = document.getElementById('rp-why');
+      var ctaEl = document.getElementById('rp-cta');
+      var codeEl = document.getElementById('rp-code');
+
+      function applyLang(l) {
+        lang = l;
+        try { localStorage.setItem(STORAGE_KEY, l); } catch (e) {}
+        document.documentElement.lang = l;
+        var t = T[l], s = t[state];
+        document.getElementById('rp-title').textContent = t.title;
+        document.getElementById('rp-subtitle').textContent = s.subtitle;
+        statusEl.className = 'rp-msg ' + (state === 'ok' ? 'ok' : state === 'err' ? 'err' : 'neutral');
+        statusEl.textContent = s.status;
+        whyEl.textContent = s.why;
+        whyEl.style.display = s.why ? 'block' : 'none';
+        ctaEl.textContent = s.cta;
+        document.querySelectorAll('.locale-toggle button').forEach(function (b) {
+          b.classList.toggle('active', b.dataset.locale === l);
+        });
+      }
+
+      document.querySelectorAll('.locale-toggle button').forEach(function (b) {
+        b.addEventListener('click', function () { applyLang(b.dataset.locale); });
+      });
+
+      applyLang(lang);
+
+      // Техническая строка — чтобы поддержка не гадала, что именно отказало.
+      if (state === 'err' && errorCode) {
+        codeEl.style.display = 'block';
+        codeEl.textContent = errorCode;
+      }
+
+      // Адрес чистим: в нём лежат одноразовые значения, им не место
+      // в истории браузера и в заголовке страницы.
+      if (window.history && window.history.replaceState) {
+        try { window.history.replaceState({}, document.title, window.location.pathname); } catch (e) {}
+      }
+    })();
+  </script>
+</body>
+</html>

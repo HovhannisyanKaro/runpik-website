@@ -11,6 +11,26 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="landing.css">
+
+  <!--
+    Письма подтверждения ведут сюда, на корень: так настроен адрес проекта.
+    Supabase кладёт исход в адрес — отказ в якорь (#error_code=…), успех в
+    запрос (?code=…) — и в обоих случаях показывает обычную главную. Человек
+    видит лендинг и решает, что подтвердил, хотя подтверждения не было.
+    Поэтому исход уводим на /confirm, где ему скажут правду. Значения
+    передаём как есть.
+  -->
+  <script>
+    (function () {
+      try {
+        var h = window.location.hash || '';
+        var q = window.location.search || '';
+        var isAuthOutcome = h.indexOf('error_code=') > -1 || q.indexOf('error_code=') > -1 ||
+                            h.indexOf('access_token=') > -1 || /[?&]code=/.test(q);
+        if (isAuthOutcome) window.location.replace('/confirm' + q + h);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
 
