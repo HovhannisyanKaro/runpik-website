@@ -250,11 +250,13 @@
       </div>
       <div class="packs" data-px="packs"></div>
       <p class="packnote" data-px="note"></p>
-      <div class="freewrap">
-        <div class="freebar">
-          <span class="plus">10</span>
-          <span class="ftext" data-px="free"></span>
+      <div class="gift">
+        <div class="giftnum" data-px="giftnum">+10</div>
+        <div class="gifttxt">
+          <div class="giftttl" data-px="gifttitle"></div>
+          <div class="giftsub" data-px="giftsub"></div>
         </div>
+        <a class="giftcta" href="https://app.runpik.com" target="_blank" rel="noopener" data-px="giftcta"></a>
       </div>
     </div>
   </section>
@@ -1006,6 +1008,18 @@
         credits: { en: '{n} credits', ru: '{n} кредитов', hy: '{n} կրեդիտ' },
         photos: { en: 'up to {n} photos or cards', ru: 'до {n} фото или карточек', hy: 'մինչև {n} լուսանկար կամ քարտ' },
         perPhoto: { en: '{p} / photo', ru: '{p} за фото', hy: '{p} / լուսանկար' },
+        buy: { en: 'Buy', ru: 'Купить', hy: 'Գնել' },
+        giftTitle: {
+          en: 'Sign up and get {n} credits',
+          ru: 'Зарегистрируйтесь — и получите {n} кредитов',
+          hy: 'Գրանցվեք և ստացեք {n} կրեդիտ'
+        },
+        giftSub: {
+          en: 'Enough for {ph} photos. No credit card, no subscription.',
+          ru: 'Хватит на {ph} фото. Без карты и без подписки.',
+          hy: 'Բավական է {ph} լուսանկարի համար։ Առանց քարտի և բաժանորդագրության։'
+        },
+        giftCta: { en: 'Start free', ru: 'Начать бесплатно', hy: 'Սկսել անվճար' },
         note: {
           en: 'Prices are shown in USD. The final price is set by the App Store or Google Play and depends on your country.',
           ru: 'Цены показаны в долларах. Итоговую цену называет App Store или Google Play — она зависит от страны.',
@@ -1073,7 +1087,16 @@
           // сайте её задача — довести туда человека, а не рассказать о цене.
           // Поэтому кликается вся карточка целиком, а не кнопка в углу.
           var card = el('a', 'pack' + (p.is_popular ? ' hot' : ''));
-          card.href = 'buy.html?pack=' + encodeURIComponent(p.code);
+          // ⛔ ВЕДЁМ В ПРИЛОЖЕНИЕ, А НЕ НА СТРАНИЦУ ПОКУПКИ НА САЙТЕ.
+          // Кредиты принадлежат АККАУНТУ, а лендинг не знает, кто перед ним —
+          // человек может быть вовсе не зарегистрирован. Начни мы покупку
+          // здесь, он легко купил бы её под другим входом (почта на сайте,
+          // Google в приложении), и кредиты легли бы не туда. Для него это
+          // выглядит как «заплатил и ничего не получил».
+          // Покупка живёт за входом; позже этот же адрес поведёт прямо на
+          // экран пополнения с выбранным пакетом.
+          card.href = 'https://app.runpik.com';
+          card.target = '_blank'; card.rel = 'noopener';
 
           var bText = L(p.badge);
           if (bText) {
@@ -1107,14 +1130,22 @@
           }
           card.appendChild(right);
 
+          // Кнопка — НЕ ссылка: вся карточка уже ссылка, а вложенная ссылка
+          // внутри ссылки недопустима. Это подпись, которая выглядит кнопкой
+          // и показывает, что здесь нажимают.
+          var buy = el('span', 'pbuy' + (p.is_popular ? ' grad' : ''));
+          buy.textContent = L(PX.buy);
+          card.appendChild(buy);
+
           wrap.appendChild(card);
         });
 
         var fc = state.freeCredits == null ? 10 : state.freeCredits;
-        var plus = document.querySelector('.freebar .plus');
-        var fb = document.querySelector('[data-px="free"]');
-        if (plus) plus.textContent = fc;
-        if (fb) fb.textContent = L(PX.free).replace('{n}', fc);
+        var plus = document.querySelector('[data-px="giftnum"]');
+        if (plus) plus.textContent = '+' + fc;
+        setText('[data-px="gifttitle"]', L(PX.giftTitle).replace('{n}', fc));
+        setText('[data-px="giftsub"]', L(PX.giftSub).replace('{ph}', Math.max(1, Math.floor(fc / gen))));
+        setText('[data-px="giftcta"]', L(PX.giftCta));
 
         // «Почему Runpik» — та же цена за фотографию, чтобы два места на
         // странице не называли разные числа.

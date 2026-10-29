@@ -642,15 +642,55 @@ footer .brand .word { font-size: 22px; font-weight: 500; letter-spacing: -0.01em
 .pprice { font-size: 24px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; line-height: 1; }
 .punit { margin-top: 5px; font-size: 12px; color: var(--ink3); letter-spacing: -0.01em; }
 
+/* Кнопка внутри карточки. Это НЕ ссылка — ссылка сама карточка, а ссылка
+   внутри ссылки недопустима. Подпись показывает, что здесь нажимают. */
+.pbuy {
+  margin-top: 16px; width: 100%; display: flex; align-items: center; justify-content: center;
+  height: 40px; border-radius: 11px; font-size: 14px; font-weight: 500; letter-spacing: -0.01em;
+  color: var(--ink); border: 0.5px solid var(--line-2); background: transparent;
+  transition: background .16s ease, border-color .16s ease;
+}
+.pack:hover .pbuy { border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.04); }
+.pbuy.grad { background: var(--grad); border: 0; color: #fff; box-shadow: 0 8px 22px rgba(123, 91, 255, 0.3); }
+.pack:hover .pbuy.grad { box-shadow: 0 12px 28px rgba(123, 91, 255, 0.42); }
+
 .packnote {
   margin: 18px auto 0; max-width: 620px; text-align: center;
   font-size: 12px; line-height: 1.5; color: var(--ink3); letter-spacing: -0.01em;
 }
 
-.freewrap { margin-top: 32px; display: flex; justify-content: center; }
-.freebar { display: inline-flex; align-items: center; gap: 12px; background: var(--surface-2); border: 0.5px solid var(--line); border-radius: 999px; padding: 14px 24px; max-width: 100%; }
-.freebar .plus { font-size: 13px; font-weight: 600; color: #fff; background: var(--grad); padding: 4px 9px; border-radius: 999px; letter-spacing: -0.01em; box-shadow: 0 4px 12px rgba(123, 91, 255, 0.3); flex-shrink: 0; }
-.freebar .ftext { font-size: 14px; color: var(--ink2); letter-spacing: -0.01em; }
+/* ---- Подарок при регистрации ----------------------------------------
+   Нарочно НЕ похож на карточку пакета: там покупают, здесь получают даром.
+   Одинаковый вид стёр бы разницу, и бесплатное потерялось бы среди платного.
+   -------------------------------------------------------------------- */
+.gift {
+  margin: 28px auto 0; max-width: 760px;
+  display: flex; align-items: center; gap: 20px;
+  padding: 20px 24px; border-radius: 18px;
+  background: linear-gradient(var(--surface-2), var(--surface-2)) padding-box, var(--grad) border-box;
+  border: 1px solid transparent;
+}
+.giftnum {
+  flex-shrink: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1;
+  background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.gifttxt { flex: 1; min-width: 0; }
+.giftttl { font-size: 16px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em; }
+.giftsub { margin-top: 4px; font-size: 13px; color: var(--ink2); letter-spacing: -0.01em; }
+.giftcta {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  height: 42px; padding: 0 20px; border-radius: 12px;
+  background: var(--grad); color: #fff; text-decoration: none;
+  font-size: 14px; font-weight: 500; letter-spacing: -0.01em;
+  box-shadow: 0 8px 22px rgba(123, 91, 255, 0.32);
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.giftcta:hover { box-shadow: 0 12px 30px rgba(123, 91, 255, 0.46); transform: translateY(-1px); }
+
+@media (max-width: 620px) {
+  .gift { flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px; }
+  .giftcta { width: 100%; }
+}
 
 /* Узкий экран: ряд превращается в строки «иконка — название — цена».
    Ширину держит grid-template-columns, поэтому цены выстраиваются в
@@ -673,6 +713,9 @@ footer .brand .word { font-size: 22px; font-weight: 500; letter-spacing: -0.01em
   .pbody { margin-top: 0; }
   .pright { margin-top: 0; text-align: right; }
   .pprice { font-size: 19px; }
+  /* В строке кнопка не нужна: нажимается вся строка, а отдельная кнопка
+     съела бы треть ширины ради того же действия. */
+  .pbuy { display: none; }
 }
 @media (max-width: 1000px) {
   .pricing { padding: 44px 20px; }
@@ -680,8 +723,6 @@ footer .brand .word { font-size: 22px; font-weight: 500; letter-spacing: -0.01em
   .pricing .sec-head .s { font-size: 14px; max-width: 320px; }
 }
 @media (max-width: 560px) {
-  .freebar { padding: 14px 20px; }
-  .freebar .ftext { font-size: 13px; }
   .pph { display: none; }        /* на самом узком оставляем кредиты и цену */
   .packnote { font-size: 11px; }
 }
