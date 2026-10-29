@@ -248,11 +248,8 @@
         <h2 class="h" data-px="headline">Plans that scale with you</h2>
         <p class="s" data-px="sub"></p>
       </div>
-      <div class="billtoggle" data-px="toggle" role="group" aria-label="Billing period">
-        <button type="button" data-period="monthly" data-px="monthly" class="active">Monthly</button>
-        <button type="button" data-period="yearly" data-px="yearly">Yearly</button>
-      </div>
-      <div class="pcards" data-px="cards"></div>
+      <div class="packs" data-px="packs"></div>
+      <p class="packnote" data-px="note"></p>
       <div class="freewrap">
         <div class="freebar">
           <span class="plus">10</span>
@@ -973,210 +970,185 @@
       load(curLang);
     })();
 
-    // ===== Pricing (dynamic — live plans from backend) =====
-    // Plans + prices come from Supabase (subscription_plans + nested
-    // subscription_skus, anon-readable). "≈ N photos" is computed from the
-    // default gem's credit_generate (GET /gems). Re-renders on language and
-    // billing-period change. Falls back to a baked snapshot if the network
-    // fails, so the section never renders empty.
+    // ===== Pricing — одноразовые пакеты кредитов (живые данные) =====
+    // Пакеты и цены приходят из Supabase (`topup_packs`, доступна анониму).
+    // Подарок при регистрации — из тарифа `free`. «≈ N фото» считается из
+    // `/gems`: берётся цена операции `image-generate` у активного камня.
+    //
+    // ⛔ ЦЕНА ЗДЕСЬ — ОРИЕНТИР, А НЕ ОБЕЩАНИЕ. В приложении её называет
+    // магазин: в каждой стране своя валюта, свой налог и свои отметки
+    // округления. На сайте магазина нет, брать неоткуда, поэтому показываем
+    // долларовую строку из базы и честно подписываем это под таблицей.
+    //
+    // ⛔ КНОПОК «КУПИТЬ» ЗДЕСЬ НЕТ НАМЕРЕННО: веб-оплаты у нас не существует,
+    // покупка живёт только в приложении. Кнопка, которая ведёт не туда, куда
+    // обещает, хуже отсутствующей.
     (function () {
       var SUPA = 'https://wnbtsqfdlbjwtetppdng.supabase.co';
-      // Public anon key — safe to expose in client code; reads are RLS-gated.
+      // Публичный анонимный ключ — он и задуман открытым, чтение ограничено RLS.
       var ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InduYnRzcWZkbGJqd3RldHBwZG5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDQwMDAsImV4cCI6MjA5MzcyMDAwMH0.7mvR-FGSAzTZGRUzcz0tkGmNxWX3uwDxhtejrcwxxPM';
-      var PLANS_API = SUPA + '/rest/v1/subscription_plans?select=code,title,credits_monthly,is_popular,highlight,badge,features,sort_order,subscription_skus(period,price_display,is_active)&is_active=eq.true&order=sort_order';
+      var PACKS_API = SUPA + '/rest/v1/topup_packs?select=code,title,credits,price_display,is_popular,badge,icon_url,sort_order&is_active=eq.true&order=sort_order';
+      var FREE_API = SUPA + '/rest/v1/subscription_plans?select=signup_bonus_credits&code=eq.free';
       var GEMS_API = 'https://wnbtsqfdlbjwtetppdng.functions.supabase.co/gems';
 
       var PX = {
         eyebrow: { en: 'Pricing', ru: 'Цены', hy: 'Գներ' },
-        headline: { en: 'Plans that scale with you', ru: 'Тарифы, что растут вместе с вами', hy: 'Սակագներ, որ աճում են ձեզ հետ' },
-        sub: {
-          en: 'Every photo costs credits. Pick a monthly plan and cancel anytime — or start free.',
-          ru: 'Каждое фото стоит кредиты. Выберите тариф и отменяйте в любой момент — или начните бесплатно.',
-          hy: 'Յուրաքանչյուր լուսանկար արժե կրեդիտներ։ Ընտրեք սակագինը և չեղարկեք ցանկացած պահի՝ կամ սկսեք անվճար։'
+        headline: {
+          en: 'Product photos from {p}',
+          ru: 'Фотография товара — от {p}',
+          hy: 'Ապրանքի լուսանկարը՝ {p}-ից'
         },
-        monthly: { en: 'Monthly', ru: 'Помесячно', hy: 'Ամսական' },
-        yearly: { en: 'Yearly', ru: 'На год', hy: 'Տարեկան' },
-        save: { en: 'save 30%', ru: '−30%', hy: '−30%' },
-        perMo: { en: '/mo', ru: '/мес', hy: '/ամիս' },
-        perYr: { en: '/yr', ru: '/год', hy: '/տարի' },
-        freePrice: { en: 'Free', ru: 'Бесплатно', hy: 'Անվճար' },
-        creditsMo: { en: 'credits / month', ru: 'кредитов / месяц', hy: 'կրեդիտ / ամիս' },
-        photosMo: { en: '≈ {n} photos / month', ru: '≈ {n} фото / месяц', hy: '≈ {n} լուսանկար / ամիս' },
-        billedYr: { en: '≈ {p}/mo billed yearly', ru: '≈ {p}/мес при оплате за год', hy: '≈ {p}/ամիս տարեկան վճարմամբ' },
-        fromPhoto: { en: 'from {p} per photo', ru: 'от {p} за фото', hy: '{p}-ից մեկ լուսանկարի համար' },
-        choose: { en: 'Choose', ru: 'Выбрать', hy: 'Ընտրել' },
-        startFree: { en: 'Start free', ru: 'Начать бесплатно', hy: 'Սկսել անվճար' },
+        sub: {
+          en: 'Buy credits when you need them. One-time purchase — no subscription, nothing renews.',
+          ru: 'Покупайте кредиты, когда они нужны. Разовая покупка — без подписки, ничего не продлевается.',
+          hy: 'Գնեք կրեդիտներ, երբ անհրաժեշտ է։ Միանվագ գնում՝ առանց բաժանորդագրության։'
+        },
+        credits: { en: '{n} credits', ru: '{n} кредитов', hy: '{n} կրեդիտ' },
+        photos: { en: 'up to {n} photos or cards', ru: 'до {n} фото или карточек', hy: 'մինչև {n} լուսանկար կամ քարտ' },
+        perPhoto: { en: '{p} / photo', ru: '{p} за фото', hy: '{p} / լուսանկար' },
+        note: {
+          en: 'Prices are shown in USD. The final price is set by the App Store or Google Play and depends on your country.',
+          ru: 'Цены показаны в долларах. Итоговую цену называет App Store или Google Play — она зависит от страны.',
+          hy: 'Գները ցուցադրված են դոլարով։ Վերջնական գինը սահմանում է App Store-ը կամ Google Play-ը։'
+        },
         free: {
-          en: 'Start on Basic — {n} free credits every month. No credit card required.',
-          ru: 'Начните с Basic — {n} бесплатных кредитов каждый месяц. Без карты.',
-          hy: 'Սկսեք Basic-ով — {n} անվճար կրեդիտ ամեն ամիս։ Քարտ պետք չէ։'
-        }
+          en: '{n} free credits to start. No credit card required.',
+          ru: '{n} бесплатных кредитов на старт. Карта не нужна.',
+          hy: '{n} անվճար կրեդիտ սկսելու համար։ Քարտ պետք չէ։'
+        },
+        fromPhoto: { en: 'from {p} per photo', ru: 'от {p} за фото', hy: '{p}-ից մեկ լուսանկարի համար' }
       };
 
-      // Honest shared feature list — mirrors the backend seed (Variant A).
-      var FEAT = [
-        { label: { en: 'All shot types & scenes', ru: 'Все типы кадров и сцены' } },
-        { label: { en: 'All Inspire styles', ru: 'Все стили Inspire' } },
-        { label: { en: 'Improve & refine photos', ru: 'Улучшение и доработка фото' } },
-        { label: { en: 'All aspect ratios (1:1, 4:3, 16:9, 3:4, 9:16)', ru: 'Все форматы кадра (1:1, 4:3, 16:9, 3:4, 9:16)' } },
-        { label: { en: 'Lighting controls', ru: 'Управление освещением' } },
-        { label: { en: 'Commercial use', ru: 'Коммерческое использование' } }
-      ];
-      // Baked fallback (mirrors backend seed) — used only if the live fetch fails.
+      // Запасные данные — ровно то, что лежит в базе на 29.10.2026. Нужны
+      // только чтобы секция не оказалась пустой при сбое сети.
       var FALLBACK = [
-        { code: 'free', title: { en: 'Basic' }, credits_monthly: 10, is_popular: false, highlight: null, badge: null, features: FEAT, subscription_skus: [] },
-        { code: 'starter', title: { en: 'Starter' }, credits_monthly: 60, is_popular: false, highlight: null, badge: null, features: FEAT, subscription_skus: [{ period: 'monthly', is_active: true, price_display: '$5/mo' }, { period: 'yearly', is_active: true, price_display: '$42/yr' }] },
-        { code: 'creator', title: { en: 'Creator' }, credits_monthly: 180, is_popular: true, highlight: 'popular', badge: { en: 'Most popular', ru: 'Популярный' }, features: FEAT, subscription_skus: [{ period: 'monthly', is_active: true, price_display: '$12/mo' }, { period: 'yearly', is_active: true, price_display: '$99/yr' }] },
-        { code: 'pro', title: { en: 'Pro' }, credits_monthly: 450, is_popular: false, highlight: null, badge: null, features: FEAT, subscription_skus: [{ period: 'monthly', is_active: true, price_display: '$25/mo' }, { period: 'yearly', is_active: true, price_display: '$210/yr' }] },
-        { code: 'studio', title: { en: 'Studio' }, credits_monthly: 1400, is_popular: false, highlight: 'flagship', badge: { en: 'Best value', ru: 'Выгоднее всего' }, features: FEAT, subscription_skus: [{ period: 'monthly', is_active: true, price_display: '$50/mo' }, { period: 'yearly', is_active: true, price_display: '$420/yr' }] }
+        { code: 'pack_trial',    title: { en: 'Trial',    ru: 'Проба' },   credits: 60,   price_display: '$4.99',   is_popular: false, badge: null },
+        { code: 'pack_series',   title: { en: 'Series',   ru: 'Серия' },   credits: 180,  price_display: '$11.99',  is_popular: false, badge: null },
+        { code: 'pack_studio',   title: { en: 'Studio',   ru: 'Студия' },  credits: 500,  price_display: '$28.99',  is_popular: true,  badge: { en: "Sellers' choice", ru: 'Выбор продавцов' } },
+        { code: 'pack_business', title: { en: 'Business', ru: 'Бизнес' },  credits: 1500, price_display: '$72.99',  is_popular: false, badge: null },
+        { code: 'pack_bulk',     title: { en: 'Bulk',     ru: 'Оптовый' }, credits: 6250, price_display: '$244.99', is_popular: false, badge: { en: 'Best value', ru: 'Выгоднее всего' } }
       ];
 
-      var state = { plans: null, gen: 4, period: 'monthly' };
-
-      var CK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
-      var CG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="url(#cg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      var state = { packs: null, gen: 5, freeCredits: 10 };
 
       function L(o) { return o ? (o[curLang] || o.en || '') : ''; }
       function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
       function setText(sel, t) { var e = document.querySelector(sel); if (e) e.textContent = t; }
+      function priceNum(display) {
+        var n = parseFloat(String(display || '').replace(/[^0-9.]/g, ''));
+        return isNaN(n) ? null : n;
+      }
+      function money(n) { return '$' + (n < 1 ? n.toFixed(2) : n.toFixed(2)); }
 
-      function skuFor(plan, period) {
-        var s = (plan.subscription_skus || []).filter(function (x) { return x.is_active && x.period === period; });
-        return s.length ? s[0] : null;
-      }
-      function priceParts(display) {
-        var main = String(display).split('/')[0].trim();
-        var num = parseFloat(main.replace(/[^0-9.]/g, ''));
-        return { main: main, num: isNaN(num) ? null : num };
-      }
-      // Cheapest real cost per generated photo across all active plans/periods
-      // (monthly-equivalent price ÷ monthly credits × credits-per-photo).
-      function cheapestPerPhoto(plans, gen) {
+      // Самая низкая цена за фотографию по всем пакетам — ею и открывается
+      // секция. Человек спрашивает «сколько мне это будет стоить», а не
+      // «сколько стоит пакет»: 245 долларов пугают, 20 центов — нет.
+      function cheapestPerPhoto(packs, gen) {
         var best = null;
-        plans.forEach(function (p) {
-          if (!p.credits_monthly) return;
-          (p.subscription_skus || []).forEach(function (s) {
-            if (!s.is_active) return;
-            var pp = priceParts(s.price_display);
-            if (pp.num == null) return;
-            var monthly = s.period === 'yearly' ? pp.num / 12 : pp.num;
-            var perPhoto = (monthly / p.credits_monthly) * gen;
-            if (best == null || perPhoto < best) best = perPhoto;
-          });
+        packs.forEach(function (p) {
+          var num = priceNum(p.price_display);
+          if (num == null || !p.credits) return;
+          var per = num / Math.floor(p.credits / gen);
+          if (best == null || per < best) best = per;
         });
         return best;
       }
-      function featRow(text, hot) {
-        var pf = el('div', 'pf');
-        var ci = el('span', 'ci'); ci.innerHTML = hot ? CG : CK;
-        var ct = el('span', 'ct'); ct.textContent = text;
-        pf.appendChild(ci); pf.appendChild(ct);
-        return pf;
-      }
 
       function render() {
+        var packs = state.packs || FALLBACK;
+        var gen = state.gen || 5;
+
         setText('[data-px="eyebrow"]', L(PX.eyebrow));
-        setText('[data-px="headline"]', L(PX.headline));
+        var cpp = cheapestPerPhoto(packs, gen);
+        setText('[data-px="headline"]', L(PX.headline).replace('{p}', cpp == null ? '$0.20' : money(cpp)));
         setText('[data-px="sub"]', L(PX.sub));
+        setText('[data-px="note"]', L(PX.note));
 
-        var mBtn = document.querySelector('[data-px="monthly"]');
-        var yBtn = document.querySelector('[data-px="yearly"]');
-        if (mBtn) mBtn.textContent = L(PX.monthly);
-        if (yBtn) yBtn.innerHTML = L(PX.yearly) + ' <span class="save">' + L(PX.save) + '</span>';
-        document.querySelectorAll('[data-px="toggle"] button').forEach(function (b) {
-          b.classList.toggle('active', b.dataset.period === state.period);
-        });
-
-        var plans = state.plans || FALLBACK;
-        var gen = state.gen || 4;
-        var wrap = document.querySelector('[data-px="cards"]');
+        var wrap = document.querySelector('[data-px="packs"]');
         if (!wrap) return;
         wrap.innerHTML = '';
 
-        var freeCredits = null;
-        plans.forEach(function (p) {
-          var isFree = p.code === 'free' || !(p.subscription_skus && p.subscription_skus.length);
-          var hot = !!p.highlight;
-          var card = el('div', 'pcard ' + (hot ? 'popular' : 'plain') + (p.is_popular ? ' lift' : '') + (p.highlight === 'flagship' ? ' flagship' : ''));
-          if (p.badge) { var bg = el('div', 'badge'); bg.textContent = L(p.badge); card.appendChild(bg); }
+        packs.forEach(function (p) {
+          // ⛔ Карточка — ССЫЛКА, а не блок. Покупка живёт в приложении, и на
+          // сайте её задача — довести туда человека, а не рассказать о цене.
+          // Поэтому кликается вся карточка целиком, а не кнопка в углу.
+          var card = el('a', 'pack' + (p.is_popular ? ' hot' : ''));
+          card.href = 'buy.html?pack=' + encodeURIComponent(p.code);
 
-          var nm = el('div', 'pname'); nm.textContent = L(p.title); card.appendChild(nm);
-
-          var price = el('div', 'price');
-          if (isFree) {
-            if (p.code === 'free') freeCredits = p.credits_monthly;
-            price.textContent = L(PX.freePrice);
-          } else {
-            var sku = skuFor(p, state.period);
-            if (sku) {
-              var pp = priceParts(sku.price_display);
-              var per = state.period === 'monthly' ? L(PX.perMo) : L(PX.perYr);
-              price.innerHTML = pp.main + ' <span class="per">' + per + '</span>';
-            } else {
-              price.textContent = '—';
-            }
-          }
-          card.appendChild(price);
-
-          if (!isFree && state.period === 'yearly') {
-            var ysku = skuFor(p, 'yearly');
-            if (ysku) {
-              var yp = priceParts(ysku.price_display);
-              if (yp.num != null) {
-                var mo = yp.num / 12;
-                var moStr = '$' + (mo >= 10 ? Math.round(mo) : mo.toFixed(1));
-                var pe = el('div', 'peryr'); pe.textContent = L(PX.billedYr).replace('{p}', moStr);
-                card.appendChild(pe);
-              }
-            }
+          var bText = L(p.badge);
+          if (bText) {
+            var bg = el('div', 'pbadge' + (p.is_popular ? ' green' : ''));
+            bg.textContent = bText;
+            card.appendChild(bg);
           }
 
-          var cr = el('div', 'credits'); cr.textContent = p.credits_monthly + ' ' + L(PX.creditsMo); card.appendChild(cr);
+          if (p.icon_url) {
+            var ic = el('img', 'picon');
+            ic.src = p.icon_url; ic.alt = ''; ic.loading = 'lazy';
+            ic.width = 56; ic.height = 56;
+            card.appendChild(ic);
+          }
 
-          card.appendChild(el('div', 'card-div'));
+          var body = el('div', 'pbody');
+          var nm = el('div', 'pttl'); nm.textContent = L(p.title); body.appendChild(nm);
+          var cr = el('div', 'pcr'); cr.textContent = L(PX.credits).replace('{n}', p.credits); body.appendChild(cr);
+          var ph = el('div', 'pph');
+          ph.textContent = L(PX.photos).replace('{n}', Math.max(1, Math.floor(p.credits / gen)));
+          body.appendChild(ph);
+          card.appendChild(body);
 
-          var feats = el('div', 'pfeats');
-          var photos = Math.max(1, Math.round(p.credits_monthly / gen));
-          feats.appendChild(featRow(L(PX.photosMo).replace('{n}', photos), hot));
-          (p.features || []).forEach(function (f) { if (f.included !== false) feats.appendChild(featRow(L(f.label), hot)); });
-          card.appendChild(feats);
-
-          var cta = el('a', 'cta ' + (hot ? 'grad' : 'outline'));
-          cta.href = 'https://app.runpik.com'; cta.target = '_blank'; cta.rel = 'noopener';
-          cta.textContent = isFree ? L(PX.startFree) : (L(PX.choose) + ' ' + L(p.title));
-          card.appendChild(cta);
+          var right = el('div', 'pright');
+          var pr = el('div', 'pprice'); pr.textContent = p.price_display || '—'; right.appendChild(pr);
+          var num = priceNum(p.price_display);
+          if (num != null && p.credits) {
+            var unit = el('div', 'punit');
+            unit.textContent = L(PX.perPhoto).replace('{p}', money(num / Math.floor(p.credits / gen)));
+            right.appendChild(unit);
+          }
+          card.appendChild(right);
 
           wrap.appendChild(card);
         });
 
-        var fc = freeCredits != null ? freeCredits : 10;
+        var fc = state.freeCredits == null ? 10 : state.freeCredits;
         var plus = document.querySelector('.freebar .plus');
         var fb = document.querySelector('[data-px="free"]');
         if (plus) plus.textContent = fc;
         if (fb) fb.textContent = L(PX.free).replace('{n}', fc);
 
-        // "Why Runpik" comparison: cheapest cost-per-photo, computed live.
-        var cpp = cheapestPerPhoto(plans, gen);
+        // «Почему Runpik» — та же цена за фотографию, чтобы два места на
+        // странице не называли разные числа.
         var sub = document.querySelector('[data-i18n="cmp.runpik.substat"]');
-        if (sub && cpp != null) sub.textContent = L(PX.fromPhoto).replace('{p}', '$' + cpp.toFixed(2));
+        if (sub && cpp != null) sub.textContent = L(PX.fromPhoto).replace('{p}', money(cpp));
       }
 
       pricingRender = render;
 
-      document.querySelectorAll('[data-px="toggle"] button').forEach(function (btn) {
-        btn.addEventListener('click', function () { state.period = btn.dataset.period; render(); });
-      });
-
-      // Paint immediately with the fallback, then hydrate from the network.
+      // Рисуем сразу запасными данными, затем подменяем живыми.
       render();
       Promise.all([
-        fetch(PLANS_API, { headers: { apikey: ANON, Authorization: 'Bearer ' + ANON, Accept: 'application/json' } }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+        fetch(PACKS_API, { headers: { apikey: ANON, Authorization: 'Bearer ' + ANON, Accept: 'application/json' } }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+        fetch(FREE_API, { headers: { apikey: ANON, Authorization: 'Bearer ' + ANON, Accept: 'application/json' } }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
         fetch(GEMS_API, { headers: { Accept: 'application/json' } }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
       ]).then(function (res) {
-        var plans = res[0], gems = res[1];
-        if (plans && plans.length) state.plans = plans;
+        var packs = res[0], free = res[1], gems = res[2];
+        if (packs && packs.length) state.packs = packs;
+        if (free && free.length && typeof free[0].signup_bonus_credits === 'number') {
+          state.freeCredits = free[0].signup_bonus_credits;
+        }
+        // ⛔ Цена фотографии лежит в `operations`, а НЕ в поле `credit_generate`:
+        // прежний код читал несуществующее поле и молча считал по запасной
+        // четвёрке, хотя фотография стоит пять. Счёт «≈ N фото» был завышен
+        // на четверть всё это время.
         if (gems && gems.gems && gems.gems.length) {
-          var costs = gems.gems.map(function (g) { return g.credit_generate; }).filter(function (n) { return typeof n === 'number' && n > 0; });
+          var costs = [];
+          gems.gems.forEach(function (g) {
+            (g.operations || []).forEach(function (o) {
+              if (o.op === 'image-generate' && typeof o.credit_price === 'number' && o.credit_price > 0) {
+                costs.push(o.credit_price);
+              }
+            });
+          });
           if (costs.length) state.gen = Math.min.apply(null, costs);
         }
         render();

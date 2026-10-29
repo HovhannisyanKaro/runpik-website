@@ -21,6 +21,8 @@
   Cache-Control: public, max-age=0, must-revalidate
 /reset-password
   Cache-Control: public, max-age=0, must-revalidate
+/buy.html
+  Cache-Control: public, max-age=0, must-revalidate
 /terms.html
   Cache-Control: public, max-age=0, must-revalidate
 /privacy.html

@@ -597,58 +597,82 @@ footer .brand .word { font-size: 22px; font-weight: 500; letter-spacing: -0.01em
 .pricing .sec-head { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .pricing .sec-head .h { margin-top: 14px; font-size: 42px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); line-height: 1.08; }
 .pricing .sec-head .s { margin-top: 16px; max-width: 560px; font-size: 17px; line-height: 1.55; color: var(--ink2); letter-spacing: -0.01em; }
-.pricing .billtoggle { margin-top: 28px; display: flex; justify-content: center; gap: 8px; }
-.pricing .billtoggle button { background: var(--surface); border: 0.5px solid var(--line); color: var(--ink2); padding: 9px 18px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 500; letter-spacing: -0.01em; transition: color .16s ease, border-color .16s ease; }
-.pricing .billtoggle button:hover { color: var(--ink); border-color: var(--line-2); }
-.pricing .billtoggle button.active { color: var(--ink); background: linear-gradient(var(--surface-2), var(--surface-2)) padding-box, var(--grad) border-box; border: 1px solid transparent; }
-.pricing .billtoggle .save { color: #7BE0A3; font-weight: 600; font-size: 12px; margin-left: 4px; }
+/* ---- Пакеты кредитов ------------------------------------------------
+   Пять пакетов. На широком экране — ряд, на узком — СТРОКИ, а не столбик
+   из пяти карточек: пять карточек в столбик это три экрана пролистывания,
+   а строки умещаются в половину одного, и их можно сравнить взглядом.
+   Горизонтальной карусели нет намеренно — человек видит две карточки,
+   не догадывается листать и уходит.
+   -------------------------------------------------------------------- */
+.packs { margin-top: 40px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; align-items: stretch; }
 
-.pcards { margin-top: 40px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; align-items: stretch; }
-.pcard { position: relative; display: flex; flex-direction: column; background: var(--surface); border-radius: 20px; padding: 24px 20px; }
-.pcard.plain { border: 0.5px solid var(--line); }
-.pcard.popular { background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--grad) border-box; border: 1px solid transparent; box-shadow: 0 24px 60px rgba(123, 91, 255, 0.18); }
-.pcard.flagship { background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--grad) border-box; border: 1px solid transparent; box-shadow: 0 20px 50px rgba(255, 91, 155, 0.16); }
-.pcards .pcard.lift { transform: translateY(-12px); }
-.peryr { margin-top: 4px; font-size: 12px; color: var(--ink3); letter-spacing: -0.01em; }
-.pname { font-size: 16px; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; }
-.ptag { margin-top: 6px; font-size: 13px; letter-spacing: -0.01em; }
-.pcard.plain .ptag { color: var(--ink3); }
-.pcard.popular .ptag { color: var(--ink2); }
-.price { margin-top: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; color: var(--ink); font-size: 36px; }
-.pcard.popular .price { font-size: 40px; }
-.price .per { font-size: 15px; font-weight: 400; color: var(--ink3); letter-spacing: -0.01em; }
-.credits { margin-top: 6px; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
-.pcard.plain .credits { color: var(--ink2); }
-.pcard.popular .credits { color: var(--ink); }
-.unit { margin-top: 4px; font-size: 12px; color: var(--ink3); letter-spacing: -0.01em; }
-.unit .bv { font-weight: 500; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.pcard .card-div { margin: 24px 0 22px; }
-.pfeats { display: flex; flex-direction: column; gap: 13px; margin-bottom: 24px; }
-.pf { display: flex; align-items: flex-start; gap: 10px; }
-.pf .ci { width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px; }
-.pf .ci svg { width: 15px; height: 15px; display: block; }
-.pf .ct { font-size: 14px; line-height: 1.4; letter-spacing: -0.01em; }
-.pcard.plain .pf .ci { color: var(--ink3); }
-.pcard.plain .pf .ct { color: var(--ink2); }
-.pcard.popular .pf .ct { color: var(--ink); }
-.cta { margin-top: auto; display: flex; align-items: center; justify-content: center; width: 100%; height: 48px; font-size: 15px; font-family: inherit; font-weight: 500; cursor: pointer; border-radius: 13px; letter-spacing: -0.01em; text-decoration: none; }
-.cta.outline { background: transparent; border: 0.5px solid var(--line-2); color: var(--ink); }
-.cta.outline:hover { border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.03); }
-.cta.grad { background: var(--grad); border: 0; color: #fff; box-shadow: 0 8px 24px rgba(123, 91, 255, 0.34), 0 0 20px rgba(255, 91, 155, 0.14); transition: box-shadow 0.2s ease, transform 0.2s ease; }
-.cta.grad:hover { box-shadow: 0 12px 30px rgba(123, 91, 255, 0.46); transform: translateY(-1px); }
-.badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--grad); color: #fff; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 12px; border-radius: 999px; box-shadow: 0 6px 16px rgba(123, 91, 255, 0.36); white-space: nowrap; }
+.pack {
+  position: relative; display: flex; flex-direction: column; align-items: center; text-align: center;
+  background: var(--surface); border: 0.5px solid var(--line);
+  border-radius: 18px; padding: 26px 16px 20px;
+  text-decoration: none; cursor: pointer;
+  transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+.pack:hover { border-color: var(--line-2); transform: translateY(-2px); }
+.pack.hot:hover { box-shadow: 0 26px 60px rgba(123, 91, 255, 0.24); }
+.pack:focus-visible { outline: 2px solid #7B5BFF; outline-offset: 3px; }
+.pack.hot {
+  background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--grad) border-box;
+  border: 1px solid transparent;
+  box-shadow: 0 20px 50px rgba(123, 91, 255, 0.16);
+}
+
+.pbadge {
+  position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+  background: var(--grad); color: #fff;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(123, 91, 255, 0.34);
+}
+.pbadge.green { background: #2FBF71; box-shadow: 0 6px 16px rgba(47, 191, 113, 0.34); }
+
+.picon { width: 56px; height: 56px; display: block; }
+
+.pbody { margin-top: 12px; }
+.pttl { font-size: 15px; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; }
+.pcr { margin-top: 6px; font-size: 14px; font-weight: 500; color: var(--ink2); letter-spacing: -0.01em; }
+.pph { margin-top: 3px; font-size: 12px; color: var(--ink3); letter-spacing: -0.01em; }
+
+.pright { margin-top: 16px; }
+.pprice { font-size: 24px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; line-height: 1; }
+.punit { margin-top: 5px; font-size: 12px; color: var(--ink3); letter-spacing: -0.01em; }
+
+.packnote {
+  margin: 18px auto 0; max-width: 620px; text-align: center;
+  font-size: 12px; line-height: 1.5; color: var(--ink3); letter-spacing: -0.01em;
+}
 
 .freewrap { margin-top: 32px; display: flex; justify-content: center; }
 .freebar { display: inline-flex; align-items: center; gap: 12px; background: var(--surface-2); border: 0.5px solid var(--line); border-radius: 999px; padding: 14px 24px; max-width: 100%; }
 .freebar .plus { font-size: 13px; font-weight: 600; color: #fff; background: var(--grad); padding: 4px 9px; border-radius: 999px; letter-spacing: -0.01em; box-shadow: 0 4px 12px rgba(123, 91, 255, 0.3); flex-shrink: 0; }
 .freebar .ftext { font-size: 14px; color: var(--ink2); letter-spacing: -0.01em; }
 
-@media (max-width: 1180px) {
-  .pcards { grid-template-columns: repeat(3, 1fr); }
-  .pcards .pcard.lift { transform: none; }
-}
-@media (max-width: 760px) {
-  .pcards { grid-template-columns: repeat(2, 1fr); }
+/* Узкий экран: ряд превращается в строки «иконка — название — цена».
+   Ширину держит grid-template-columns, поэтому цены выстраиваются в
+   колонку и их можно сравнить, не держа в голове. */
+@media (max-width: 1000px) {
+  .packs { grid-template-columns: 1fr; gap: 10px; margin-top: 28px; }
+  .pack {
+    display: grid; grid-template-columns: 44px 1fr auto;
+    align-items: center; gap: 14px;
+    text-align: left; padding: 14px 16px; border-radius: 14px;
+  }
+  .pack.hot { box-shadow: none; }
+  .pbadge {
+    position: static; transform: none; justify-self: start;
+    grid-column: 2 / -1; grid-row: 1;
+    margin-bottom: 2px; font-size: 9px; padding: 3px 8px;
+  }
+  .pbadge ~ .picon { grid-column: 1; grid-row: 1 / span 2; }
+  .picon { width: 44px; height: 44px; }
+  .pbody { margin-top: 0; }
+  .pright { margin-top: 0; text-align: right; }
+  .pprice { font-size: 19px; }
 }
 @media (max-width: 1000px) {
   .pricing { padding: 44px 20px; }
@@ -656,7 +680,47 @@ footer .brand .word { font-size: 22px; font-weight: 500; letter-spacing: -0.01em
   .pricing .sec-head .s { font-size: 14px; max-width: 320px; }
 }
 @media (max-width: 560px) {
-  .pcards { grid-template-columns: 1fr; gap: 16px; }
   .freebar { padding: 14px 20px; }
   .freebar .ftext { font-size: 13px; }
+  .pph { display: none; }        /* на самом узком оставляем кредиты и цену */
+  .packnote { font-size: 11px; }
+}
+
+/* ---- Страница покупки пакета (buy.html) -----------------------------
+   Одна карточка по центру: что покупаем, QR и ссылки на магазины.
+   Кнопки «Купить» здесь нет и быть не может — веб-оплаты у нас нет,
+   а кнопка, которая ведёт не туда, куда обещает, хуже отсутствующей.
+   -------------------------------------------------------------------- */
+.buywrap { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 20px; gap: 22px; }
+
+.buyback { display: inline-flex; align-items: center; gap: 8px; color: var(--ink2); text-decoration: none; font-size: 14px; letter-spacing: -0.01em; }
+.buyback:hover { color: var(--ink); }
+
+.buycard {
+  width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  background: var(--surface); border: 0.5px solid var(--line); border-radius: 22px; padding: 32px 26px 26px;
+}
+.buyicon { width: 72px; height: 72px; display: block; }
+.buyttl { margin-top: 14px; font-size: 24px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
+.buymeta { margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink2); letter-spacing: -0.01em; }
+.buydot { color: var(--ink3); }
+
+/* Белая подложка под кодом — не украшение: сканеры хуже читают тёмный QR. */
+.qrbox { margin-top: 24px; background: #fff; border-radius: 16px; padding: 14px; line-height: 0; }
+.qrbox img, .qrbox canvas { display: block; }
+
+.buylead { margin-top: 20px; font-size: 15px; line-height: 1.5; color: var(--ink); letter-spacing: -0.01em; }
+.buynote { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--ink3); letter-spacing: -0.01em; }
+
+.buystores { margin-top: 22px; display: flex; gap: 10px; width: 100%; }
+.buystore {
+  flex: 1; display: flex; align-items: center; justify-content: center; height: 44px;
+  border: 0.5px solid var(--line-2); border-radius: 12px; color: var(--ink);
+  text-decoration: none; font-size: 14px; font-weight: 500; letter-spacing: -0.01em;
+}
+.buystore:hover { border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.03); }
+
+@media (max-width: 420px) {
+  .buycard { padding: 26px 18px 20px; border-radius: 18px; }
+  .buyttl { font-size: 21px; }
 }
